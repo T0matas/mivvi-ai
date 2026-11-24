@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Box, Typography, IconButton } from '@mui/material'
-import { Search, PersonAddAlt1Rounded, ChatBubbleOutlineRounded, AddRounded } from '@mui/icons-material'
-import { ChatSummary, GroupInfo, PublicProfile, isOnline, isUnread, pairId, receiptOf, dmRef, groupRef } from '../services/social'
+import { Box, Typography, IconButton, Menu, MenuItem, Divider } from '@mui/material'
+import { Search, PersonAddAlt1Rounded, ChatBubbleOutlineRounded, AddRounded, MoreVertRounded, ArchiveOutlined, UnarchiveOutlined, BlockRounded, PersonRemoveRounded } from '@mui/icons-material'
+import { ChatSummary, GroupInfo, PublicProfile, BlockedContact, isOnline, isUnread, pairId, receiptOf, dmRef, groupRef, archiveContact, unarchiveContact, blockContact, unblockContact, removeFriendship, subscribeArchivedContacts, subscribeBlockedContacts } from '../services/social'
 import { PreviewText, SeenAvatar } from './Receipt'
 import Conversation, { GroupAvatar, Thread } from './Conversation'
 import { CreateGroupDialog, GroupInfoDialog } from './Groups'
@@ -40,14 +40,26 @@ export default function Chat({ me, friends, incomingCount, chats, groups, openWi
   const [query, setQuery] = useState('')
   const [creating, setCreating] = useState(false)
   const [infoOpen, setInfoOpen] = useState(false)
+  const [archived, setArchived] = useState<BlockedContact[]>([])
+  const [blocked, setBlocked] = useState<BlockedContact[]>([])
+  const [contactMenu, setContactMenu] = useState<{ anchor: HTMLElement; friend: FriendView; archived: boolean } | null>(null)
   useEffect(() => { if (openWith) setActive(`dm:${openWith}`) }, [openWith])
+  useEffect(() => {
+    const a = subscribeArchivedContacts(me.uid, setArchived)
+    const b = subscribeBlockedContacts(me.uid, setBlocked)
+    return () => { a(); b() }
+  }, [me.uid])
 
   const q = query.trim().toLowerCase()
   const byChat = useMemo(() => Object.fromEntries(chats.map((c) => [c.id, c])), [chats])
   const dms = useMemo(() => friends
     .map((f) => ({ f, chat: byChat[pairId(me.uid, f.uid)] }))
-    .filter(({ f }) => !q || f.name.toLowerCase().includes(q))
-    .sort((a, b) => (b.chat?.lastAt || 0) - (a.chat?.lastAt || 0) || a.f.name.localeCompare(b.f.name)), [friends, byChat, me.uid, q])
+    .filter(({ f }) => !archived.some((a) => a.uid === f.uid) && (!q || f.name.toLowerCase().includes(q)))
+    .sort((a, b) => (b.chat?.lastAt || 0) - (a.chat?.lastAt || 0) || a.f.name.localeCompare(b.f.name)), [friends, byChat, me.uid, q, archived])
+  const archivedDms = useMemo(() => friends
+    .filter((f) => archived.some((a) => a.uid === f.uid) && (!q || f.name.toLowerCase().includes(q)))
+    .map((f) => ({ f, chat: byChat[pairId(me.uid, f.uid)] }))
+    .sort((a, b) => (b.chat?.lastAt || 0) - (a.chat?.lastAt || 0)), [friends, byChat, me.uid, q, archived])
   const groupList = useMemo(() => groups.filter((g) => !q || g.name.toLowerCase().includes(q)).sort((a, b) => (b.lastAt || 0) - (a.lastAt || 0)), [groups, q])
 
   // Desktop opens the most recent conversation.
@@ -81,7 +93,7 @@ export default function Chat({ me, friends, incomingCount, chats, groups, openWi
   const currentGroup = thread?.group || null
 
   const row = (key: string, on: boolean, unread: boolean, avatar: React.ReactNode, title: string, when: number | undefined, preview: React.ReactNode, trailing?: React.ReactNode) => (
-    <Box key={key} component="button" onClick={() => { soundManager.playClick(); setActive(key) }}
+    <Box key={key} component="div" role="button" tabIndex={0} onClick={() => { soundManager.playClick(); setActive(key) }} onKeyDown={(e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setActive(key) } }}
       sx={{ width: '100%', display: 'flex', alignItems: 'center', gap: 1.25, p: '8px 10px', border: 0, borderRadius: '12px', textAlign: 'left', font: 'inherit', color: cv.text, cursor: 'pointer',
         bgcolor: on ? cv.surface : 'transparent', '&:hover': { bgcolor: on ? cv.surface : cv.soft } }}>
       {avatar}
@@ -160,7 +172,10 @@ export default function Chat({ me, friends, incomingCount, chats, groups, openWi
               <Box sx={{ px: 0.75 }}>
                 {dms.map(({ f, chat }) => row(`dm:${f.uid}`, active === `dm:${f.uid}` && !isMobile, chat ? isUnread(chat, me.uid) : false,
                   <Avatar name={f.name} photo={f.profile?.photo} size={36} online={isOnline(f.profile)} />, f.name, chat?.lastAt, previewOf(chat),
-                  chat?.lastText && chat.lastFrom === me.uid && receiptOf({ at: chat.lastAt || 0 }, chat, f.uid) === 'seen' ? <SeenAvatar friend={{ name: f.name, photo: f.profile?.photo }} /> : undefined))}
+                  <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.2, flexShrink: 0 }}>
+                    {chat?.lastText && chat.lastFrom === me.uid && receiptOf({ at: chat.lastAt || 0 }, chat, f.uid) === 'seen' && <SeenAvatar friend={{ name: f.name, photo: f.profile?.photo }} />}
+                    <IconButton aria-label={`Opções de ${f.name}`} onClick={(e) => { e.stopPropagation(); setContactMenu({ anchor: e.currentTarget, friend: f, archived: false }) }} sx={{ width: 30, height: 30 }}><MoreVertRounded sx={{ fontSize: 19 }} /></IconButton>
+                  </Box>))}
                 {!friends.length && (
                   <Box sx={{ px: 1.5, py: 3, display: 'grid', justifyItems: 'center', textAlign: 'center', gap: 1 }}>
                     <Mascot size={56} mood="happy" animated={false} />
@@ -171,6 +186,24 @@ export default function Chat({ me, friends, incomingCount, chats, groups, openWi
                 )}
                 {q && !dms.length && !groupList.length && <Typography sx={{ px: 1.5, py: 2, fontSize: 13, color: cv.muted }}>Nada com “{query}”.</Typography>}
               </Box>
+              {archivedDms.length > 0 && <>
+                {sectionTitle('Arquivadas')}
+                <Box sx={{ px: 0.75 }}>
+                  {archivedDms.map(({ f, chat }) => row(`dm:${f.uid}`, active === `dm:${f.uid}` && !isMobile, chat ? isUnread(chat, me.uid) : false,
+                    <Avatar name={f.name} photo={f.profile?.photo} size={36} />, f.name, chat?.lastAt, previewOf(chat),
+                    <IconButton aria-label={`Opções de ${f.name}`} onClick={(e) => { e.stopPropagation(); setContactMenu({ anchor: e.currentTarget, friend: f, archived: true }) }} sx={{ width: 30, height: 30 }}><MoreVertRounded sx={{ fontSize: 19 }} /></IconButton>))}
+                </Box>
+              </>}
+              {blocked.length > 0 && <>
+                {sectionTitle('Contactos bloqueados')}
+                <Box sx={{ px: 0.75 }}>
+                  {blocked.map((f) => <Box key={f.uid} sx={{ display: 'flex', alignItems: 'center', gap: 1.25, p: '8px 10px' }}>
+                    <Avatar name={f.name} photo={f.photo} size={36} />
+                    <Typography sx={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</Typography>
+                    <IconButton aria-label={`Desbloquear ${f.name}`} title="Desbloquear" onClick={() => unblockContact(me.uid, f.uid).catch(() => window.alert('Não foi possível desbloquear este contacto.'))} sx={{ width: 32, height: 32 }}><BlockRounded sx={{ fontSize: 17 }} /></IconButton>
+                  </Box>)}
+                </Box>
+              </>}
             </Box>
           </Box>
         )}
@@ -188,6 +221,40 @@ export default function Chat({ me, friends, incomingCount, chats, groups, openWi
       </Box>
 
       <CreateGroupDialog open={creating} me={me} friends={friends} onClose={() => setCreating(false)} onCreated={(id) => { setCreating(false); setActive(`g:${id}`) }} />
+      <Menu anchorEl={contactMenu?.anchor} open={!!contactMenu} onClose={() => setContactMenu(null)} PaperProps={{ sx: { minWidth: 200, bgcolor: '#242424', color: cv.text, border: `1px solid ${cv.border}`, borderRadius: '14px' } }}>
+        {contactMenu && <>
+          <MenuItem onClick={async () => {
+            const item = contactMenu
+            setContactMenu(null)
+            try {
+              if (item.archived) await unarchiveContact(me.uid, item.friend.uid)
+              else await archiveContact(me.uid, { uid: item.friend.uid, name: item.friend.name, handle: item.friend.profile?.handle || '', photo: item.friend.profile?.photo })
+              if (!item.archived && active === `dm:${item.friend.uid}`) setActive(null)
+            } catch { window.alert('Não foi possível atualizar as conversas arquivadas.') }
+          }}>
+            {contactMenu.archived ? <UnarchiveOutlined sx={{ mr: 1.5, fontSize: 18 }} /> : <ArchiveOutlined sx={{ mr: 1.5, fontSize: 18 }} />}{contactMenu.archived ? 'Desarquivar' : 'Arquivar conversa'}
+          </MenuItem>
+          <Divider sx={{ borderColor: cv.border }} />
+          <MenuItem sx={{ color: '#ff9f9f' }} onClick={async () => {
+            const item = contactMenu
+            setContactMenu(null)
+            if (!window.confirm(`Bloquear ${item.friend.name}? Esta pessoa deixará de poder falar contigo.`)) return
+            try {
+              await blockContact(me.uid, { uid: item.friend.uid, name: item.friend.name, handle: item.friend.profile?.handle || '', photo: item.friend.profile?.photo }, item.friend.friendship.id)
+              if (active === `dm:${item.friend.uid}`) setActive(null)
+            } catch { window.alert('Não foi possível bloquear este contacto.') }
+          }}><BlockRounded sx={{ mr: 1.5, fontSize: 18 }} />Bloquear</MenuItem>
+          <MenuItem sx={{ color: '#ff9f9f' }} onClick={async () => {
+            const item = contactMenu
+            setContactMenu(null)
+            if (!window.confirm(`Apagar ${item.friend.name} dos teus contactos?`)) return
+            try {
+              await removeFriendship(item.friend.friendship.id)
+              if (active === `dm:${item.friend.uid}`) setActive(null)
+            } catch { window.alert('Não foi possível apagar este contacto.') }
+          }}><PersonRemoveRounded sx={{ mr: 1.5, fontSize: 18 }} />Apagar contacto</MenuItem>
+        </>}
+      </Menu>
       {currentGroup && <GroupInfoDialog open={infoOpen} me={me} group={currentGroup} friends={friends} onClose={() => setInfoOpen(false)} onLeft={() => { setInfoOpen(false); setActive(null) }} />}
     </Box>
   )

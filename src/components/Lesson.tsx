@@ -92,15 +92,9 @@ export default function Lesson({ lessonId, onComplete, onMistake, onBack, userPr
 
   // The Mivvi AI panel beside the lesson (a sheet on smaller screens).
   const narrow = useMediaQuery('(max-width: 999px)')
-  // Start closed on every screen. The student can open Mivvi from the button.
-  const [aiOpen, setAiOpen] = useState(false)
+  // Keep Mivvi open throughout the lesson, including when exercises begin.
+  const [aiOpen, setAiOpen] = useState(true)
   const inset = !narrow && aiOpen ? PANEL_WIDTH + 20 : 0
-
-  // Starting the exercises always returns the lesson to its focused layout,
-  // even if Mivvi was opened while reading the explanation.
-  useEffect(() => {
-    if (phase === 'quiz') setAiOpen(false)
-  }, [phase])
 
   const exercise = exercises[index]
   const kind: keyof typeof KIND = exercise
@@ -272,7 +266,7 @@ export default function Lesson({ lessonId, onComplete, onMistake, onBack, userPr
   const aiButton = !aiOpen && (
     <Box component="button" onClick={() => { soundManager.playClick(); setAiOpen(true) }} aria-label="Pergunta ao Mivvi"
       sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, height: 32, px: 1.25, border: 0, borderRadius: 999, bgcolor: cv.accentSoft, color: '#cfe3ff', font: 'inherit', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap', '&:hover': { bgcolor: 'rgba(96,165,250,.26)' } }}>
-      <Mascot size={18} mood="happy" animated={false} />{narrow ? 'Mivvi' : 'Pergunta ao Mivvi'}
+      <Box component="img" src="/mivvi-logo.svg" alt="" sx={{ width: 20, height: 20, borderRadius: '6px' }} />{narrow ? 'Mivvi' : 'Pergunta ao Mivvi'}
     </Box>
   )
 

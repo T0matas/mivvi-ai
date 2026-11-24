@@ -1,170 +1,93 @@
 rules_version = '2';
-
-// Mivvi — Firestore security rules.
-// Paste this in Firebase Console → Firestore Database → Rules → Publish
-// (or run `firebase deploy --only firestore:rules`).
-
 service cloud.firestore {
   match /databases/{database}/documents {
-
     function signedIn() { return request.auth != null; }
     function me() { return request.auth.uid; }
-    function areFriends(pair) {
-      return exists(/databases/$(database)/documents/friendships/$(pair))
-        && get(/databases/$(database)/documents/friendships/$(pair)).data.status == 'accepted';
-    }
+    function areFriends(pair) { return exists(/databases/$(database)/documents/friendships/$(pair)) && get(/databases/$(database)/documents/friendships/$(pair)).data.status == 'accepted'; }
 
-    // Private profile + progress (and the lesson library), only for the owner.
     match /users/{uid} {
       allow read, write: if signedIn() && me() == uid;
-      match /library/{item} {
-        allow read, write: if signedIn() && me() == uid;
-      }
+      match /library/{item} { allow read, write: if signedIn() && me() == uid; }
+      match /archivedChats/{friendUid} { allow read, write: if signedIn() && me() == uid; }
+      match /blocked/{friendUid} { allow read, write: if signedIn() && me() == uid; }
     }
-
-    // Unique names: anyone can check if a name is free; only the owner can take or free it.
     match /usernames/{handle} {
       allow read: if true;
       allow create: if signedIn() && request.resource.data.uid == me();
       allow update: if signedIn() && resource.data.uid == me() && request.resource.data.uid == me();
       allow delete: if signedIn() && resource.data.uid == me();
     }
-
-    // Public card shown to other students (name, year, xp, photo, last seen).
-    match /profiles/{uid} {
-      allow read: if signedIn();
-      allow write: if signedIn() && me() == uid;
-    }
-
-    // Friend requests: the sender creates, the receiver accepts, either removes.
+    match /profiles/{uid} { allow read: if signedIn(); allow write: if signedIn() && me() == uid; }
     match /friendships/{pair} {
       allow get: if signedIn() && me() in pair.split('_');
       allow list: if signedIn() && me() in resource.data.users;
-      allow create: if signedIn()
-        && request.resource.data.from == me()
-        && request.resource.data.status == 'pending'
-        && request.resource.data.users.size() == 2
-        && pair.split('_').hasAll(request.resource.data.users)
-        && me() in request.resource.data.users
-        && request.resource.data.to in request.resource.data.users
-        && request.resource.data.to != me();
-      allow update: if signedIn()
-        && resource.data.to == me()
-        && request.resource.data.status == 'accepted'
-        && request.resource.data.users == resource.data.users
-        && request.resource.data.from == resource.data.from;
+      allow create: if signedIn() && request.resource.data.from == me() && request.resource.data.status == 'pending'
+        && request.resource.data.users.size() == 2 && pair.split('_').hasAll(request.resource.data.users)
+        && me() in request.resource.data.users && request.resource.data.to in request.resource.data.users && request.resource.data.to != me()
+        && !exists(/databases/$(database)/documents/users/$(me())/blocked/$(request.resource.data.to))
+        && !exists(/databases/$(database)/documents/users/$(request.resource.data.to)/blocked/$(me()));
+      allow update: if signedIn() && resource.data.to == me() && request.resource.data.status == 'accepted'
+        && request.resource.data.users == resource.data.users && request.resource.data.from == resource.data.from;
       allow delete: if signedIn() && me() in resource.data.users;
     }
-
-    // Direct messages, only between friends.
     match /chats/{pair} {
       allow get: if signedIn() && me() in pair.split('_');
       allow list: if signedIn() && me() in resource.data.users;
-      allow create, update: if signedIn()
-        && me() in pair.split('_')
-        && request.resource.data.users.hasAll(pair.split('_'))
-        && areFriends(pair);
-
+      allow create, update: if signedIn() && me() in pair.split('_') && request.resource.data.users.hasAll(pair.split('_')) && areFriends(pair);
       match /messages/{msg} {
         allow read: if signedIn() && me() in pair.split('_') && areFriends(pair);
-        allow create: if signedIn()
-          && me() in pair.split('_')
-          && request.resource.data.from == me()
-          && request.resource.data.text is string
-          && request.resource.data.text.size() <= 2000
-          && (request.resource.data.text.size() > 0 || request.resource.data.get('kind', 'text') != 'text')
-          && areFriends(pair);
-        // Edit or delete my own message (only text, editedAt, deleted and the attachment link change).
-        allow update: if signedIn()
-          && resource.data.from == me()
-          && request.resource.data.from == me()
+        allow create: if signedIn() && me() in pair.split('_') && request.resource.data.from == me()
+          && request.resource.data.text is string && request.resource.data.text.size() <= 2000
+          && (request.resource.data.text.size() > 0 || request.resource.data.get('kind', 'text') != 'text') && areFriends(pair);
+        allow update: if signedIn() && resource.data.from == me() && request.resource.data.from == me()
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'editedAt', 'deleted', 'fileId', 'name'])
-          && request.resource.data.text is string
-          && request.resource.data.text.size() <= 2000;
+          && request.resource.data.text is string && request.resource.data.text.size() <= 2000;
         allow delete: if signedIn() && resource.data.from == me();
       }
-
-      // Photos, files and voice messages (base64, under the 1 MB document limit).
       match /files/{file} {
         allow read: if signedIn() && me() in pair.split('_') && areFriends(pair);
-        allow create: if signedIn()
-          && me() in pair.split('_')
-          && request.resource.data.from == me()
-          && request.resource.data.data is string
-          && request.resource.data.data.size() < 1000000
-          && areFriends(pair);
+        allow create: if signedIn() && me() in pair.split('_') && request.resource.data.from == me()
+          && request.resource.data.data is string && request.resource.data.data.size() < 1000000 && areFriends(pair);
         allow delete: if signedIn() && resource.data.from == me();
       }
     }
-
-    // Study groups: members talk; the admins rename and add people; anyone can leave.
     match /groups/{gid} {
       function isMember() { return signedIn() && me() in resource.data.members; }
       function memberOfGroup() { return signedIn() && me() in get(/databases/$(database)/documents/groups/$(gid)).data.members; }
       allow get, list: if isMember();
-      allow create: if signedIn()
-        && request.resource.data.createdBy == me()
-        && me() in request.resource.data.members
-        && request.resource.data.admins == [me()]
-        && request.resource.data.members.size() <= 50;
-      allow update: if isMember()
-        && request.resource.data.createdBy == resource.data.createdBy
-        && request.resource.data.admins == resource.data.admins
-        && (
-          // activity: last message, reads, delivered, typing
-          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['members', 'memberNames', 'name', 'color'])
-          // admins manage the group
-          || me() in resource.data.admins
-          // anyone can leave (only removing themself)
+      allow create: if signedIn() && request.resource.data.createdBy == me() && me() in request.resource.data.members
+        && request.resource.data.admins == [me()] && request.resource.data.members.size() <= 50;
+      allow update: if isMember() && request.resource.data.createdBy == resource.data.createdBy && request.resource.data.admins == resource.data.admins
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['members', 'memberNames', 'name', 'color']) || me() in resource.data.admins
           || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members', 'memberNames'])
-              && !(me() in request.resource.data.members)
-              && request.resource.data.members.size() == resource.data.members.size() - 1)
-        )
+            && !(me() in request.resource.data.members) && request.resource.data.members.size() == resource.data.members.size() - 1))
         && request.resource.data.members.size() <= 50;
       allow delete: if signedIn() && me() in resource.data.admins;
-
       match /messages/{msg} {
         allow read: if memberOfGroup();
-        allow create: if memberOfGroup()
-          && request.resource.data.from == me()
-          && request.resource.data.text is string
-          && request.resource.data.text.size() <= 2000
-          && (request.resource.data.text.size() > 0 || request.resource.data.get('kind', 'text') != 'text');
-        allow update: if memberOfGroup()
-          && resource.data.from == me()
-          && request.resource.data.from == me()
+        allow create: if memberOfGroup() && request.resource.data.from == me() && request.resource.data.text is string
+          && request.resource.data.text.size() <= 2000 && (request.resource.data.text.size() > 0 || request.resource.data.get('kind', 'text') != 'text');
+        allow update: if memberOfGroup() && resource.data.from == me() && request.resource.data.from == me()
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'editedAt', 'deleted', 'fileId', 'name'])
-          && request.resource.data.text is string
-          && request.resource.data.text.size() <= 2000;
+          && request.resource.data.text is string && request.resource.data.text.size() <= 2000;
         allow delete: if signedIn() && resource.data.from == me();
       }
       match /files/{file} {
         allow read: if memberOfGroup();
-        allow create: if memberOfGroup()
-          && request.resource.data.from == me()
-          && request.resource.data.data is string
-          && request.resource.data.data.size() < 1000000;
+        allow create: if memberOfGroup() && request.resource.data.from == me() && request.resource.data.data is string && request.resource.data.data.size() < 1000000;
         allow delete: if signedIn() && resource.data.from == me();
       }
     }
-
-    // Calls: WebRTC handshake between two friends.
     match /calls/{call} {
       allow read: if signedIn() && (resource.data.from == me() || resource.data.to == me());
-      allow create: if signedIn()
-        && request.resource.data.from == me()
-        && request.resource.data.to != me()
+      allow create: if signedIn() && request.resource.data.from == me() && request.resource.data.to != me()
         && request.resource.data.pair.split('_').hasAll([me(), request.resource.data.to])
-        && request.resource.data.status == 'ringing'
-        && areFriends(request.resource.data.pair);
-      allow update: if signedIn()
-        && (resource.data.from == me() || resource.data.to == me())
-        && request.resource.data.from == resource.data.from
-        && request.resource.data.to == resource.data.to;
+        && request.resource.data.status == 'ringing' && areFriends(request.resource.data.pair);
+      allow update: if signedIn() && (resource.data.from == me() || resource.data.to == me())
+        && request.resource.data.from == resource.data.from && request.resource.data.to == resource.data.to;
       match /{side}/{candidate} {
-        allow read, create: if signedIn()
-          && (get(/databases/$(database)/documents/calls/$(call)).data.from == me()
-            || get(/databases/$(database)/documents/calls/$(call)).data.to == me());
+        allow read, create: if signedIn() && (get(/databases/$(database)/documents/calls/$(call)).data.from == me()
+          || get(/databases/$(database)/documents/calls/$(call)).data.to == me());
       }
     }
   }

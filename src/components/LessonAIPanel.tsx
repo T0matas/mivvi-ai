@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Box, Typography, IconButton } from '@mui/material'
 import { ArrowUpward, Close, EditNoteRounded, StopRounded, ContentCopyRounded, CheckRounded, RefreshRounded } from '@mui/icons-material'
-import Mascot from './Mascot'
 import { Markdown } from './AITutor'
 import { chatWithKodu, TutorContext } from '../services/aiService'
 import { KoduMessage } from '../services/codevantumAI'
@@ -99,7 +98,7 @@ export default function LessonAIPanel({ open, onClose, mobile, context, contextL
         }}>
         {/* Header */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.75, height: 54, flexShrink: 0, borderBottom: `1px solid ${cv.border}` }}>
-          <Mascot size={22} mood="happy" animated={false} />
+          <Box component="img" src="/mivvi-logo.svg" alt="" sx={{ width: 24, height: 24, borderRadius: '8px', flexShrink: 0 }} />
           <Typography sx={{ flex: 1, fontSize: 15, fontWeight: 650 }}>Pergunta ao Mivvi</Typography>
           <IconButton onClick={() => { abort.current?.abort(); setMessages([]); soundManager.playClick() }} aria-label="Nova conversa" title="Nova conversa" sx={{ width: 32, height: 32 }}><EditNoteRounded sx={{ fontSize: 19 }} /></IconButton>
           <IconButton onClick={() => { soundManager.playBack(); onClose() }} aria-label="Fechar" sx={{ width: 32, height: 32 }}><Close sx={{ fontSize: 18 }} /></IconButton>
@@ -109,7 +108,7 @@ export default function LessonAIPanel({ open, onClose, mobile, context, contextL
         <Box ref={scroller} sx={{ flex: 1, overflowY: 'auto', px: 2, py: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
           {messages.length === 0 && (
             <Box sx={{ my: 'auto', display: 'grid', justifyItems: 'center', textAlign: 'center', gap: 1, py: 2 }}>
-              <Mascot size={58} mood="happy" />
+              <Box component="img" src="/mivvi-logo.svg" alt="Mivvi" sx={{ width: 58, height: 58, borderRadius: '17px' }} />
               <Typography sx={{ fontFamily: cv.display, fontSize: 17, fontWeight: 700, mt: 1 }}>Tens alguma dúvida?</Typography>
               <Typography sx={{ fontSize: 13.5, color: cv.muted, maxWidth: 260, lineHeight: 1.5 }}>
                 {answered === false && contextText ? 'Ajudo-te a pensar, mas a resposta tens de ser tu a descobrir 😉' : 'Pergunta-me o que quiseres sobre esta aula.'}

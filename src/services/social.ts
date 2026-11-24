@@ -162,6 +162,8 @@ export type RequestResult = 'sent' | 'accepted' | 'already-friends' | 'already-s
 /** Sends a request; if the other person had already asked, it becomes a friendship. */
 export async function sendFriendRequest(me: PublicProfile, other: PublicProfile): Promise<RequestResult> {
   if (me.uid === other.uid) throw new Error('Não te podes adicionar a ti próprio.')
+  const blockedByMe = await getDoc(doc(db, 'users', me.uid, 'blocked', other.uid))
+  if (blockedByMe.exists()) throw new Error('Não é possível enviar este pedido de amizade.')
   const ref = doc(db, 'friendships', pairId(me.uid, other.uid))
   const snap = await getDoc(ref)
   if (snap.exists()) {
@@ -176,6 +178,25 @@ export async function sendFriendRequest(me: PublicProfile, other: PublicProfile)
 
 export const acceptFriend = (id: string) => updateDoc(doc(db, 'friendships', id), { status: 'accepted', acceptedAt: Date.now() })
 export const removeFriendship = (id: string) => deleteDoc(doc(db, 'friendships', id))
+
+export interface BlockedContact { uid: string; name: string; photo?: string | null }
+
+export const archiveContact = (uid: string, friend: PublicProfile) =>
+  setDoc(doc(db, 'users', uid, 'archivedChats', friend.uid), { uid: friend.uid, name: friend.name, photo: friend.photo || null, archivedAt: Date.now() })
+export const unarchiveContact = (uid: string, friendUid: string) => deleteDoc(doc(db, 'users', uid, 'archivedChats', friendUid))
+
+export async function blockContact(uid: string, friend: PublicProfile, friendshipId: string) {
+  await setDoc(doc(db, 'users', uid, 'blocked', friend.uid), { uid: friend.uid, name: friend.name, photo: friend.photo || null, blockedAt: Date.now() })
+  await removeFriendship(friendshipId)
+}
+export const unblockContact = (uid: string, friendUid: string) => deleteDoc(doc(db, 'users', uid, 'blocked', friendUid))
+
+export function subscribeArchivedContacts(uid: string, cb: (items: BlockedContact[]) => void): Unsubscribe {
+  return onSnapshot(collection(db, 'users', uid, 'archivedChats'), (s) => cb(s.docs.map((d) => d.data() as BlockedContact)))
+}
+export function subscribeBlockedContacts(uid: string, cb: (items: BlockedContact[]) => void): Unsubscribe {
+  return onSnapshot(collection(db, 'users', uid, 'blocked'), (s) => cb(s.docs.map((d) => d.data() as BlockedContact)))
+}
 
 export function subscribeFriendships(uid: string, cb: (list: Friendship[]) => void, onError?: (e: unknown) => void): Unsubscribe {
   return onSnapshot(
