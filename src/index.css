@@ -87,3 +87,6 @@ h6 {
     opacity: 1;
   }
 }
+/* No visible scrollbars anywhere: pages and panels still scroll with the wheel, touch and keyboard. */
+* { scrollbar-width: none; -ms-overflow-style: none; }
+*::-webkit-scrollbar { display: none; width: 0; height: 0; }
