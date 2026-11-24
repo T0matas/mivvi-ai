@@ -123,7 +123,7 @@ export default function Dashboard({ userProgress, userProfile, onStartLesson, on
 
       {/* Header removed - moved to GameMap Unit Banner */}
       {/* Each section fades in when the tab changes (opacity only, so fixed children stay put). */}
-      <Box key={activeTab} sx={{ animation: 'tabIn .28s ease both', '@keyframes tabIn': { from: { opacity: 0 } }, '@media (prefers-reduced-motion: reduce)': { animation: 'none' } }}>
+      <Box key={activeTab} sx={{ animation: 'tabIn .28s ease backwards', '@keyframes tabIn': { from: { opacity: 0 } }, '@media (prefers-reduced-motion: reduce)': { animation: 'none' } }}>
       {activeTab === 0 && (
         <SubjectHome
           userProfile={userProfile}

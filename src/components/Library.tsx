@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Box, Typography } from '@mui/material'
+import { Box, Typography, Portal } from '@mui/material'
 import { Search, AutoStoriesRounded, CheckRounded } from '@mui/icons-material'
 import { useLibrary } from '../services/library'
 import { LibraryItem, UserProfile } from '../types'
@@ -121,7 +121,7 @@ export default function Library({ userProfile }: { userProfile: UserProfile }) {
         </Box>
       )}
 
-      {open && <LessonTheoryView mode="library" theory={open.theory} subject={open.subject} lessonNumber={open.lessonNumber} onClose={() => setOpen(null)} />}
+      {open && <Portal><LessonTheoryView mode="library" theory={open.theory} subject={open.subject} lessonNumber={open.lessonNumber} onClose={() => setOpen(null)} /></Portal>}
     </Box>
   )
 }

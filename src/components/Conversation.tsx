@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
-import { Box, Typography, IconButton, CircularProgress, Dialog } from '@mui/material'
+import { Box, Typography, IconButton, CircularProgress, Dialog, Portal } from '@mui/material'
 import {
   ArrowBack, SendRounded, AttachFileRounded, MicRounded, DeleteOutlineRounded, CallRounded, VideocamRounded,
   PlayArrowRounded, PauseRounded, BlockRounded, EditRounded, ContentCopyRounded, MoreHorizRounded, CheckRounded, InsertDriveFileRounded, DownloadRounded, CallMadeRounded, CallReceivedRounded, PhoneMissedRounded, Close,
@@ -198,9 +198,9 @@ export default function Conversation({ me, friend, chat, mobile, onBack }: { me:
   // The last message I sent gets a "Vista às 17:23" / "Entregue" line under it.
   const lastMine = [...rows].reverse().find((m) => m.from === me.uid && m.kind !== 'call')
   const lastIsMine = rows.length > 0 && rows[rows.length - 1].from === me.uid
-  return (
+  const view = (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: 0, minWidth: 0,
-      ...(mobile && { position: 'fixed', inset: 0, zIndex: 1250, bgcolor: cv.bg, pt: 'env(safe-area-inset-top, 0px)' }) }}>
+      ...(mobile && { position: 'fixed', inset: 0, zIndex: 1250, bgcolor: cv.bg, pt: 'env(safe-area-inset-top, 0px)', height: '100dvh' }) }}>
       {/* Header */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, px: { xs: 1, md: 2 }, height: 58, borderBottom: `1px solid ${cv.border}`, flexShrink: 0 }}>
         {mobile && <IconButton onClick={() => { soundManager.playBack(); onBack() }} aria-label="Voltar" sx={{ width: 36, height: 36 }}><ArrowBack sx={{ fontSize: 20 }} /></IconButton>}
@@ -362,6 +362,8 @@ export default function Conversation({ me, friend, chat, mobile, onBack }: { me:
       </Dialog>
     </Box>
   )
+  // On a phone the conversation covers the whole screen, above the navigation bar.
+  return mobile ? <Portal>{view}</Portal> : view
 }
 
 const actBtn = { width: 28, height: 28, borderRadius: '7px', color: cv.muted, '&:hover': { color: cv.text, bgcolor: cv.soft } }
