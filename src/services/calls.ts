@@ -25,9 +25,26 @@ export interface CallDoc {
   acceptedAt?: number
 }
 
+// STUN finds the public address; TURN relays the audio when a direct link is
+// impossible (e.g. one phone on mobile data and the other on school Wi-Fi).
+// The Open Relay TURN servers are free and public; set VITE_TURN_URL /
+// VITE_TURN_USERNAME / VITE_TURN_CREDENTIAL to use your own.
+const env = (import.meta as any).env || {}
 const ICE: RTCConfiguration = {
-  iceServers: [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302', 'stun:stun2.l.google.com:19302'] }],
+  iceServers: [
+    { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
+    env.VITE_TURN_URL
+      ? { urls: String(env.VITE_TURN_URL).split(','), username: env.VITE_TURN_USERNAME, credential: env.VITE_TURN_CREDENTIAL }
+      : { urls: ['turn:openrelay.metered.ca:80', 'turn:openrelay.metered.ca:443', 'turn:openrelay.metered.ca:443?transport=tcp'], username: 'openrelayproject', credential: 'openrelayproject' },
+  ],
   iceCandidatePoolSize: 4,
+}
+
+export interface PeerEvents {
+  /** The friend's audio/video arrived (or changed). */
+  onRemote: (stream: MediaStream) => void
+  /** connecting / connected / disconnected / failed … */
+  onState: (state: RTCPeerConnectionState) => void
 }
 
 export function getMedia(type: CallType) {
@@ -61,11 +78,17 @@ export interface Session {
   close: () => void
 }
 
-function makePeer(local: MediaStream, callId: string, mine: 'callerCandidates' | 'calleeCandidates', theirs: 'callerCandidates' | 'calleeCandidates') {
+function makePeer(local: MediaStream, callId: string, mine: 'callerCandidates' | 'calleeCandidates', theirs: 'callerCandidates' | 'calleeCandidates', events: PeerEvents) {
   const pc = new RTCPeerConnection(ICE)
   const remote = new MediaStream()
   local.getTracks().forEach((t) => pc.addTrack(t, local))
-  pc.ontrack = (e) => e.streams[0]?.getTracks().forEach((t) => { if (!remote.getTracks().includes(t)) remote.addTrack(t) })
+  pc.ontrack = (e) => {
+    const stream = e.streams[0] || remote
+    if (!e.streams[0] && !remote.getTracks().includes(e.track)) remote.addTrack(e.track)
+    events.onRemote(stream)
+  }
+  pc.onconnectionstatechange = () => events.onState(pc.connectionState)
+  pc.oniceconnectionstatechange = () => { if (pc.iceConnectionState === 'failed') { try { pc.restartIce() } catch { /* old browser */ } } }
   // Candidates found before the call document exists wait in a queue.
   let ready = false
   const queue: RTCIceCandidateInit[] = []
@@ -85,10 +108,10 @@ function makePeer(local: MediaStream, callId: string, mine: 'callerCandidates' |
 }
 
 /** Starts a call to a friend. */
-export async function startCall(me: { uid: string; name: string }, otherUid: string, type: CallType): Promise<{ id: string; session: Session }> {
+export async function startCall(me: { uid: string; name: string }, otherUid: string, type: CallType, events: PeerEvents): Promise<{ id: string; session: Session }> {
   const local = await getMedia(type)
   const ref = doc(collection(db, 'calls'))
-  const peer = makePeer(local, ref.id, 'callerCandidates', 'calleeCandidates')
+  const peer = makePeer(local, ref.id, 'callerCandidates', 'calleeCandidates', events)
   const offer = await peer.pc.createOffer()
   await peer.pc.setLocalDescription(offer)
   await setDoc(ref, { pair: pairId(me.uid, otherUid), from: me.uid, to: otherUid, fromName: me.name, type, status: 'ringing', createdAt: Date.now(), offer: { type: offer.type, sdp: offer.sdp } })
@@ -102,9 +125,9 @@ export async function startCall(me: { uid: string; name: string }, otherUid: str
 }
 
 /** Answers an incoming call. */
-export async function answerCall(call: CallDoc & { offer?: RTCSessionDescriptionInit }, type: CallType): Promise<Session> {
+export async function answerCall(call: CallDoc & { offer?: RTCSessionDescriptionInit }, type: CallType, events: PeerEvents): Promise<Session> {
   const local = await getMedia(type)
-  const peer = makePeer(local, call.id, 'calleeCandidates', 'callerCandidates')
+  const peer = makePeer(local, call.id, 'calleeCandidates', 'callerCandidates', events)
   await peer.pc.setRemoteDescription(new RTCSessionDescription(call.offer!))
   const answer = await peer.pc.createAnswer()
   await peer.pc.setLocalDescription(answer)

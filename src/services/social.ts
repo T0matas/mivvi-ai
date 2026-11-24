@@ -1,6 +1,6 @@
 import {
   collection, doc, getDoc, onSnapshot, query, runTransaction, serverTimestamp, setDoc, deleteDoc, updateDoc,
-  where, orderBy, limitToLast, writeBatch, Timestamp, Unsubscribe,
+  where, orderBy, limitToLast, writeBatch, Timestamp, Unsubscribe, deleteField,
 } from 'firebase/firestore'
 import { db } from '../firebase'
 
@@ -43,6 +43,8 @@ export interface ChatSummary {
   lastFrom?: string
   lastAt?: number
   reads?: Record<string, number>
+  /** uid → when that person's app last received the messages ("entregue"). */
+  delivered?: Record<string, number>
   /** uid → a counter bumped while that person types (compared by change, not by clock). */
   typing?: Record<string, number>
 }
@@ -65,6 +67,8 @@ export interface ChatMessage {
   duration?: number
   callType?: 'audio' | 'video'
   callStatus?: 'done' | 'missed' | 'declined'
+  edited?: boolean
+  deleted?: boolean
 }
 
 /** Biggest attachment kept in the chat (stored inside Firestore, under its 1 MB document limit). */
@@ -190,7 +194,9 @@ export function subscribeChats(uid: string, cb: (list: ChatSummary[]) => void): 
       const x = d.data({ serverTimestamps: 'estimate' })
       const reads: Record<string, number> = {}
       for (const [k, v] of Object.entries(x.reads || {})) reads[k] = ms(v)
-      return { id: d.id, users: x.users, lastText: x.lastText, lastFrom: x.lastFrom, lastAt: ms(x.lastAt), reads, typing: x.typing || {} }
+      const delivered: Record<string, number> = {}
+      for (const [k, v] of Object.entries(x.delivered || {})) delivered[k] = ms(v)
+      return { id: d.id, users: x.users, lastText: x.lastText, lastFrom: x.lastFrom, lastAt: ms(x.lastAt), reads, delivered, typing: x.typing || {} }
     })),
     (e) => console.warn('chats', e),
   )
@@ -202,7 +208,7 @@ export function subscribeMessages(chatId: string, cb: (list: ChatMessage[]) => v
     { includeMetadataChanges: true },
     (s) => cb(s.docs.map((d) => {
       const x = d.data({ serverTimestamps: 'estimate' })
-      return { id: d.id, from: x.from, text: x.text || '', at: ms(x.at) || Date.now(), pending: d.metadata.hasPendingWrites, kind: x.kind || 'text', fileId: x.fileId, name: x.name, size: x.size, mime: x.mime, duration: x.duration, callType: x.callType, callStatus: x.callStatus }
+      return { id: d.id, from: x.from, text: x.text || '', at: ms(x.at) || Date.now(), pending: d.metadata.hasPendingWrites, kind: x.kind || 'text', fileId: x.fileId, name: x.name, size: x.size, mime: x.mime, duration: x.duration, callType: x.callType, callStatus: x.callStatus, edited: !!x.editedAt, deleted: !!x.deleted }
     })),
     (e) => { console.warn('messages', e); onError?.(e) },
   )
@@ -225,6 +231,21 @@ export async function sendMessage(meUid: string, otherUid: string, text: string,
   batch.set(doc(db, 'chats', id), { users: [meUid, otherUid].sort(), lastText: preview.slice(0, 140), lastFrom: meUid, lastAt: serverTimestamp(), reads: { [meUid]: serverTimestamp() }, typing: { [meUid]: 0 } }, { merge: true })
   batch.set(msgRef, { ...JSON.parse(JSON.stringify({ from: meUid, text: body, kind, fileId, name: extra.name, size: extra.size, mime: extra.mime, duration: extra.duration, callType: extra.callType, callStatus: extra.callStatus })), at: serverTimestamp() })
   await batch.commit()
+}
+
+/** Changes the text of one of my messages. */
+export async function editMessage(chatId: string, msgId: string, text: string, isLast: boolean) {
+  const body = text.trim().slice(0, 2000)
+  if (!body) return
+  await updateDoc(doc(db, 'chats', chatId, 'messages', msgId), { text: body, editedAt: Date.now() })
+  if (isLast) updateDoc(doc(db, 'chats', chatId), { lastText: body.slice(0, 140) }).catch(() => { /* fine */ })
+}
+
+/** Deletes one of my messages for both people (it shows as "Mensagem apagada"). */
+export async function deleteMessage(chatId: string, m: ChatMessage, isLast: boolean) {
+  await updateDoc(doc(db, 'chats', chatId, 'messages', m.id), { deleted: true, text: '', fileId: deleteField(), name: deleteField() })
+  if (m.fileId) deleteDoc(doc(db, 'chats', chatId, 'files', m.fileId)).catch(() => { /* fine */ })
+  if (isLast) updateDoc(doc(db, 'chats', chatId), { lastText: '🚫 Mensagem apagada' }).catch(() => { /* fine */ })
 }
 
 const fileCache = new Map<string, Promise<{ data: string; mime: string; name: string } | null>>()
@@ -254,7 +275,21 @@ export function stopTyping(meUid: string, otherUid: string) {
 
 export function markRead(meUid: string, otherUid: string) {
   const id = pairId(meUid, otherUid)
-  setDoc(doc(db, 'chats', id), { users: [meUid, otherUid].sort(), reads: { [meUid]: serverTimestamp() } }, { merge: true }).catch(() => { /* not friends yet */ })
+  setDoc(doc(db, 'chats', id), { users: [meUid, otherUid].sort(), reads: { [meUid]: serverTimestamp() }, delivered: { [meUid]: serverTimestamp() } }, { merge: true }).catch(() => { /* not friends yet */ })
+}
+
+/** This device received the friend's messages: they show "Entregue" on the other side. */
+export function markDelivered(chat: ChatSummary, meUid: string) {
+  setDoc(doc(db, 'chats', chat.id), { users: chat.users, delivered: { [meUid]: serverTimestamp() } }, { merge: true }).catch(() => { /* offline */ })
+}
+
+export type Receipt = 'pending' | 'sent' | 'delivered' | 'seen'
+/** Where one of my messages is: sending, sent, delivered to the friend's device, or seen. */
+export function receiptOf(m: { at: number; pending?: boolean }, chat: ChatSummary | undefined, otherUid: string): Receipt {
+  if (m.pending) return 'pending'
+  if ((chat?.reads?.[otherUid] || 0) >= m.at) return 'seen'
+  if ((chat?.delivered?.[otherUid] || 0) >= m.at) return 'delivered'
+  return 'sent'
 }
 
 export const isUnread = (c: ChatSummary, me: string) => !!c.lastAt && c.lastFrom !== me && c.lastAt > (c.reads?.[me] || 0)

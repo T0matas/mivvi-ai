@@ -2,12 +2,13 @@ import { Fragment, useEffect, useRef, useState } from 'react'
 import { Box, Typography, IconButton, CircularProgress, Dialog } from '@mui/material'
 import {
   ArrowBack, SendRounded, AttachFileRounded, MicRounded, DeleteOutlineRounded, CallRounded, VideocamRounded,
-  PlayArrowRounded, PauseRounded, InsertDriveFileRounded, DownloadRounded, CallMadeRounded, CallReceivedRounded, PhoneMissedRounded, Close,
+  PlayArrowRounded, PauseRounded, EditRounded, ContentCopyRounded, MoreHorizRounded, CheckRounded, InsertDriveFileRounded, DownloadRounded, CallMadeRounded, CallReceivedRounded, PhoneMissedRounded, Close,
 } from '@mui/icons-material'
-import { ChatMessage, ChatSummary, PublicProfile, isOnline, markRead, pairId, sendMessage, subscribeMessages, loadFile, pingTyping, stopTyping, MAX_FILE_BYTES } from '../services/social'
+import { ChatMessage, ChatSummary, PublicProfile, isOnline, markRead, receiptOf, editMessage, deleteMessage, pairId, sendMessage, subscribeMessages, loadFile, pingTyping, stopTyping, MAX_FILE_BYTES } from '../services/social'
 import { FriendView } from '../services/useSocial'
 import { Avatar } from './Friends'
 import { useCalls } from './CallProvider'
+import ReceiptIcon, { RECEIPT_LABEL } from './Receipt'
 import { yearLabel } from '../data/ptCurriculum'
 import { soundManager } from '../utils/soundEffects'
 import { cv } from '../theme'
@@ -63,6 +64,9 @@ export default function Conversation({ me, friend, chat, mobile, onBack }: { me:
   const [recSecs, setRecSecs] = useState(0)
   const [typing, setTyping] = useState(false)
   const [viewer, setViewer] = useState<string | null>(null)
+  const [menuFor, setMenuFor] = useState<string | null>(null)
+  const [editing, setEditing] = useState<{ id: string; text: string } | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState<ChatMessage | null>(null)
   const scroller = useRef<HTMLDivElement>(null)
   const input = useRef<HTMLTextAreaElement>(null)
   const fileInput = useRef<HTMLInputElement>(null)
@@ -178,6 +182,22 @@ export default function Conversation({ me, friend, chat, mobile, onBack }: { me:
   useEffect(() => { if (recording && recSecs >= 120) stopRecording() }, [recSecs, recording])
 
   const rows = messages || []
+  const isLastMsg = (m: ChatMessage) => rows[rows.length - 1]?.id === m.id
+  const saveEdit = async (m: ChatMessage) => {
+    const t = editing?.text.trim()
+    setEditing(null)
+    if (!t || t === m.text) return
+    try { await editMessage(chatId, m.id, t, isLastMsg(m)); soundManager.playClick() } catch { fail('Não foi possível editar a mensagem.') }
+  }
+  const doDelete = async () => {
+    const m = confirmDelete
+    setConfirmDelete(null)
+    if (!m) return
+    try { await deleteMessage(chatId, m, isLastMsg(m)); soundManager.playBack() } catch { fail('Não foi possível apagar a mensagem.') }
+  }
+  // The last message I sent gets a "Vista às 17:23" / "Entregue" line under it.
+  const lastMine = [...rows].reverse().find((m) => m.from === me.uid && m.kind !== 'call')
+  const lastIsMine = rows.length > 0 && rows[rows.length - 1].from === me.uid
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: 0, minWidth: 0,
       ...(mobile && { position: 'fixed', inset: 0, zIndex: 1250, bgcolor: cv.bg, pt: 'env(safe-area-inset-top, 0px)' }) }}>
@@ -219,7 +239,21 @@ export default function Conversation({ me, friend, chat, mobile, onBack }: { me:
                 </Box>
               )}
               {m.kind === 'call' ? <CallRow m={m} mine={mine} name={friend.name} /> : (
-                <Box sx={{ display: 'flex', gap: 1.25, mt: grouped ? 0.25 : 1.5, px: 0.75, py: 0.25, mx: -0.75, borderRadius: '10px', '&:hover': { bgcolor: 'rgba(255,255,255,.025)' }, '&:hover .msg-time': { opacity: 1 } }}>
+                <Box onClick={() => { if (mobile && !m.deleted && !editing) setMenuFor(menuFor === m.id ? null : m.id) }}
+                  sx={{ position: 'relative', display: 'flex', gap: 1.25, mt: grouped ? 0.25 : 1.5, px: 0.75, py: 0.25, mx: -0.75, borderRadius: '10px',
+                    bgcolor: menuFor === m.id || editing?.id === m.id ? 'rgba(255,255,255,.04)' : 'transparent',
+                    '&:hover': { bgcolor: 'rgba(255,255,255,.025)' }, '&:hover .msg-time': { opacity: 1 }, '&:hover .msg-actions': { opacity: 1, pointerEvents: 'auto' } }}>
+                  {/* Actions: copy, edit, delete (hover on a computer, tap on a phone) */}
+                  {!m.deleted && editing?.id !== m.id && (
+                    <Box className="msg-actions" onClick={(e) => e.stopPropagation()}
+                      sx={{ position: 'absolute', right: 6, top: -14, zIndex: 2, display: 'flex', gap: '2px', p: '3px', borderRadius: '10px', bgcolor: '#262626', boxShadow: `inset 0 0 0 1px ${cv.borderStrong}, 0 6px 16px rgba(0,0,0,.4)`,
+                        opacity: menuFor === m.id ? 1 : 0, pointerEvents: menuFor === m.id ? 'auto' : 'none', transition: 'opacity .12s' }}>
+                      {(!m.kind || m.kind === 'text') && <IconButton title="Copiar" aria-label="Copiar" onClick={() => { navigator.clipboard?.writeText(m.text); setMenuFor(null); soundManager.playClick() }} sx={actBtn}><ContentCopyRounded sx={{ fontSize: 15 }} /></IconButton>}
+                      {mine && (!m.kind || m.kind === 'text') && <IconButton title="Editar" aria-label="Editar" onClick={() => { setEditing({ id: m.id, text: m.text }); setMenuFor(null) }} sx={actBtn}><EditRounded sx={{ fontSize: 15 }} /></IconButton>}
+                      {mine && <IconButton title="Apagar" aria-label="Apagar" onClick={() => { setConfirmDelete(m); setMenuFor(null) }} sx={{ ...actBtn, '&:hover': { color: cv.coral, bgcolor: 'rgba(255,159,136,.1)' } }}><DeleteOutlineRounded sx={{ fontSize: 16 }} /></IconButton>}
+                      {mobile && <IconButton aria-label="Fechar" onClick={() => setMenuFor(null)} sx={actBtn}><MoreHorizRounded sx={{ fontSize: 16 }} /></IconButton>}
+                    </Box>
+                  )}
                   <Box sx={{ width: 34, flexShrink: 0 }}>
                     {!grouped ? <Avatar name={who.name} photo={who.photo} size={34} /> : (
                       <Typography className="msg-time" sx={{ fontSize: 10.5, color: cv.faint, opacity: 0, textAlign: 'right', pt: '3px', fontVariantNumeric: 'tabular-nums' }}>{time(m.at)}</Typography>
@@ -230,12 +264,42 @@ export default function Conversation({ me, friend, chat, mobile, onBack }: { me:
                       <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1 }}>
                         <Typography sx={{ fontSize: 14, fontWeight: 700 }}>{mine ? 'Tu' : friend.name}</Typography>
                         <Typography sx={{ fontSize: 11.5, color: cv.faint }}>{time(m.at)}</Typography>
+                        {mine && <ReceiptIcon state={receiptOf(m, chat, friend.uid)} size={14} />}
                       </Box>
                     )}
-                    {m.kind === 'image' && m.fileId ? <ImageMsg chatId={chatId} m={m} onOpen={setViewer} />
+                    {m.deleted ? (
+                      <Typography sx={{ fontSize: 14, fontStyle: 'italic', color: cv.faint }}>🚫 {mine ? 'Apagaste esta mensagem' : 'Esta mensagem foi apagada'}</Typography>
+                    ) : editing?.id === m.id ? (
+                      <Box sx={{ mt: 0.5 }} onClick={(e) => e.stopPropagation()}>
+                        <Box component="textarea" autoFocus value={editing.text} rows={Math.min(6, editing.text.split('\n').length + 1)}
+                          onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setEditing({ id: m.id, text: e.target.value })}
+                          onKeyDown={(e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+                            if (e.key === 'Escape') setEditing(null)
+                            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveEdit(m) }
+                          }}
+                          sx={{ width: '100%', boxSizing: 'border-box', resize: 'none', p: '8px 10px', border: 0, outline: 'none', borderRadius: '10px', bgcolor: cv.composer, boxShadow: 'inset 0 0 0 1px rgba(255,255,255,.3)', color: cv.text, font: 'inherit', fontSize: 14.5, lineHeight: 1.45 }} />
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5, fontSize: 12, color: cv.faint }}>
+                          <span>Esc para cancelar · Enter para guardar</span>
+                          <Box sx={{ flex: 1 }} />
+                          <Box component="button" onClick={() => setEditing(null)} sx={{ ...miniBtn, bgcolor: 'transparent', color: cv.muted }}>Cancelar</Box>
+                          <Box component="button" onClick={() => saveEdit(m)} sx={{ ...miniBtn, bgcolor: '#fff', color: '#0d0d0d' }}><CheckRounded sx={{ fontSize: 15 }} />Guardar</Box>
+                        </Box>
+                      </Box>
+                    ) : m.kind === 'image' && m.fileId ? <ImageMsg chatId={chatId} m={m} onOpen={setViewer} />
                       : m.kind === 'file' && m.fileId ? <FileMsg chatId={chatId} m={m} />
                         : m.kind === 'audio' && m.fileId ? <AudioMsg chatId={chatId} m={m} mine={mine} />
-                          : <Typography sx={{ fontSize: 14.5, lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: m.pending ? cv.muted : '#e4e4e7' }}>{m.text}</Typography>}
+                          : <Typography sx={{ fontSize: 14.5, lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: m.pending ? cv.muted : '#e4e4e7' }}>
+                              {m.text}{m.edited && <Box component="span" sx={{ ml: 0.75, fontSize: 11.5, color: cv.faint }}>(editada)</Box>}{mine && grouped && <Box component="span" sx={{ ml: 0.75 }}><ReceiptIcon state={receiptOf(m, chat, friend.uid)} size={13} /></Box>}
+                            </Typography>}
+                    {m === lastMine && lastIsMine && (() => {
+                      const r = receiptOf(m, chat, friend.uid)
+                      return (
+                        <Typography sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5, fontSize: 11.5, color: r === 'seen' ? cv.accent : cv.faint }}>
+                          <ReceiptIcon state={r} size={13} />
+                          {r === 'seen' && chat?.reads?.[friend.uid] ? `Vista às ${time(chat.reads[friend.uid])}` : RECEIPT_LABEL[r]}
+                        </Typography>
+                      )
+                    })()}
                   </Box>
                 </Box>
               )}
@@ -290,6 +354,15 @@ export default function Conversation({ me, friend, chat, mobile, onBack }: { me:
         {!mobile && <Typography sx={{ fontSize: 11.5, color: cv.faint, mt: 0.75, px: 0.5 }}><b>Enter</b> para enviar · <b>Shift + Enter</b> nova linha · fotos e ficheiros até {fmtSize(MAX_FILE_BYTES)}</Typography>}
       </Box>
 
+      <Dialog open={!!confirmDelete} onClose={() => setConfirmDelete(null)} maxWidth="xs" fullWidth PaperProps={{ sx: { bgcolor: '#1f1f1f', borderRadius: '22px', m: 2, p: 2.5, color: cv.text } }}>
+        <Typography sx={{ fontFamily: cv.display, fontSize: 18, fontWeight: 700 }}>Apagar mensagem?</Typography>
+        <Typography sx={{ fontSize: 14, color: cv.muted, mt: 0.75, lineHeight: 1.5 }}>A mensagem é apagada para ti e para {friend.name}. Fica só a indicação "mensagem apagada".</Typography>
+        <Box sx={{ display: 'flex', gap: 1, mt: 2.5 }}>
+          <Box component="button" autoFocus onClick={() => setConfirmDelete(null)} sx={{ flex: 1, height: 42, border: 0, borderRadius: 999, bgcolor: '#fff', color: '#0d0d0d', font: 'inherit', fontSize: 14.5, fontWeight: 600, cursor: 'pointer' }}>Cancelar</Box>
+          <Box component="button" onClick={doDelete} sx={{ flex: 1, height: 42, border: 0, borderRadius: 999, bgcolor: 'transparent', boxShadow: 'inset 0 0 0 1px rgba(255,159,136,.4)', color: cv.coral, font: 'inherit', fontSize: 14.5, fontWeight: 600, cursor: 'pointer' }}>Apagar</Box>
+        </Box>
+      </Dialog>
+
       <Dialog open={!!viewer} onClose={() => setViewer(null)} maxWidth="lg" PaperProps={{ sx: { bgcolor: 'transparent', border: 0, boxShadow: 'none', m: 1 } }}>
         {viewer && <Box component="img" src={viewer} alt="" onClick={() => setViewer(null)} sx={{ maxWidth: '94vw', maxHeight: '88vh', borderRadius: '14px', display: 'block' }} />}
         <IconButton onClick={() => setViewer(null)} aria-label="Fechar" sx={{ position: 'fixed', top: 16, right: 16, bgcolor: 'rgba(0,0,0,.5)', color: '#fff' }}><Close /></IconButton>
@@ -297,6 +370,9 @@ export default function Conversation({ me, friend, chat, mobile, onBack }: { me:
     </Box>
   )
 }
+
+const actBtn = { width: 28, height: 28, borderRadius: '7px', color: cv.muted, '&:hover': { color: cv.text, bgcolor: cv.soft } }
+const miniBtn = { display: 'inline-flex', alignItems: 'center', gap: 0.5, height: 28, px: 1.25, border: 0, borderRadius: 999, font: 'inherit', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }
 
 const sendBtn = (on: boolean) => ({
   width: 36, height: 36, flexShrink: 0, border: 0, borderRadius: '12px', display: 'grid', placeItems: 'center', cursor: 'pointer',

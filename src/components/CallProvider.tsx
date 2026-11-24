@@ -37,6 +37,9 @@ export default function CallProvider({ me, friends, children }: { me: PublicProf
   const [muted, setMuted] = useState(false)
   const [camOff, setCamOff] = useState(false)
   const [now, setNow] = useState(Date.now())
+  const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null)
+  const [net, setNet] = useState<RTCPeerConnectionState | 'new'>('new')
+  const [needsTap, setNeedsTap] = useState(false)
   const session = useRef<Session | null>(null)
   const unsubCall = useRef<(() => void) | null>(null)
   const activeRef = useRef<Active | null>(null)
@@ -70,11 +73,28 @@ export default function CallProvider({ me, friends, children }: { me: PublicProf
   }, [active?.status])
 
   const attach = (s: Session) => {
-    if (remoteVideo.current) remoteVideo.current.srcObject = s.remote
-    if (remoteAudio.current) remoteAudio.current.srcObject = s.remote
-    if (localVideo.current) localVideo.current.srcObject = s.local
+    if (localVideo.current && localVideo.current.srcObject !== s.local) localVideo.current.srcObject = s.local
   }
   useEffect(() => { if (session.current) attach(session.current) })
+
+  // The friend's sound/video: plug it into the players and start playback
+  // (if the browser blocks autoplay, a tap on "Ativar som" starts it).
+  const playRemote = useCallback(() => {
+    const a = remoteAudio.current
+    const v = remoteVideo.current
+    if (remoteStream) {
+      if (a && a.srcObject !== remoteStream) a.srcObject = remoteStream
+      if (v && v.srcObject !== remoteStream) v.srcObject = remoteStream
+    }
+    v?.play().catch(() => { /* muted video, fine */ })
+    a?.play().then(() => setNeedsTap(false)).catch(() => setNeedsTap(true))
+  }, [remoteStream])
+  useEffect(() => { if (remoteStream) playRemote() }, [remoteStream, active?.status, playRemote])
+
+  const events = {
+    onRemote: (st: MediaStream) => setRemoteStream(st),
+    onState: (st: RTCPeerConnectionState) => setNet(st),
+  }
 
   const cleanup = useCallback((logAs?: 'done' | 'missed' | 'declined') => {
     const a = activeRef.current
@@ -85,6 +105,9 @@ export default function CallProvider({ me, friends, children }: { me: PublicProf
     setActive(null)
     setMuted(false)
     setCamOff(false)
+    setRemoteStream(null)
+    setNet('new')
+    setNeedsTap(false)
     soundManager.playHangup()
     // The caller writes the call in the chat history.
     if (a && me && a.role === 'caller' && logAs) {
@@ -118,7 +141,7 @@ export default function CallProvider({ me, friends, children }: { me: PublicProf
     const other = { uid: friend.uid, name: friend.name, photo: friend.profile?.photo }
     setActive({ id: '', role: 'caller', type, other, status: 'ringing' })
     try {
-      const { id, session: s } = await startCall({ uid: me.uid, name: me.name }, friend.uid, type)
+      const { id, session: s } = await startCall({ uid: me.uid, name: me.name }, friend.uid, type, events)
       session.current = s
       attach(s)
       setActive({ id, role: 'caller', type, other, status: 'ringing' })
@@ -140,7 +163,7 @@ export default function CallProvider({ me, friends, children }: { me: PublicProf
     setActive(a)
     activeRef.current = a
     try {
-      session.current = await answerCall(c, type)
+      session.current = await answerCall(c, type, events)
       attach(session.current)
       watch(c.id)
     } catch (e: any) {
@@ -229,8 +252,12 @@ export default function CallProvider({ me, friends, children }: { me: PublicProf
               </Box>
               <Typography sx={{ fontFamily: cv.display, fontSize: 26, fontWeight: 700, mt: 1.5 }}>{active.other.name}</Typography>
               <Typography sx={{ color: 'rgba(255,255,255,.65)', fontSize: 15, fontVariantNumeric: 'tabular-nums' }}>
-                {active.status === 'ringing' ? 'A chamar…' : active.status === 'connecting' ? 'A ligar…' : fmt(seconds)}
+                {active.status === 'ringing' ? 'A chamar…' : active.status === 'connecting' || net === 'new' || net === 'connecting' ? 'A ligar o som…' : net === 'failed' ? 'Sem ligação' : net === 'disconnected' ? 'A religar…' : fmt(seconds)}
               </Typography>
+              {net === 'failed' && <Typography sx={{ color: cv.coral, fontSize: 13.5, maxWidth: 300 }}>A rede não deixou ligar o áudio. Experimentem a mesma rede Wi-Fi ou voltem a ligar.</Typography>}
+              {needsTap && net === 'connected' && (
+                <Box component="button" onClick={playRemote} sx={{ mt: 1, height: 40, px: 2.25, border: 0, borderRadius: 999, bgcolor: '#fff', color: '#0d0d0d', font: 'inherit', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Ativar som</Box>
+              )}
             </Box>
           )}
 

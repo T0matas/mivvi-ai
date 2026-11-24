@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { onAuthStateChanged, User } from 'firebase/auth'
 import { auth } from '../firebase'
-import { Friendship, PublicProfile, subscribeFriendships, subscribeProfile, subscribeChats, ChatSummary, isUnread } from './social'
+import { Friendship, PublicProfile, subscribeFriendships, subscribeProfile, subscribeChats, ChatSummary, isUnread, markDelivered } from './social'
 
 /** The signed-in Firebase user, kept up to date. */
 export function useAuthUser() {
@@ -32,6 +32,18 @@ export function useSocial(uid?: string | null) {
     const b = subscribeChats(uid, setChats)
     return () => { a(); b() }
   }, [uid])
+
+  // New messages reached this device: tell the sender ("Entregue").
+  const deliveredFor = useRef<Record<string, number>>({})
+  useEffect(() => {
+    if (!uid) return
+    for (const c of chats) {
+      if (!c.lastAt || c.lastFrom === uid) continue
+      if ((c.delivered?.[uid] || 0) >= c.lastAt || deliveredFor.current[c.id] === c.lastAt) continue
+      deliveredFor.current[c.id] = c.lastAt
+      markDelivered(c, uid)
+    }
+  }, [chats, uid])
 
   // Live public cards of everyone in the list (names, online status).
   const others = useMemo(() => [...new Set(friendships.map((f) => f.users.find((u) => u !== uid)!).filter(Boolean))].sort(), [friendships, uid])

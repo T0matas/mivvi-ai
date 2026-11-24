@@ -57,6 +57,7 @@ const shimmerText = {
     WebkitBackgroundClip: 'text', backgroundClip: 'text', animation: 'homeShimmer 2.2s linear infinite',
     '@keyframes homeShimmer': { from: { backgroundPosition: '100% 0' }, to: { backgroundPosition: '0% 0' } },
 }
+const chipSx = { display: 'inline-flex', alignItems: 'center', gap: 0.75, height: 34, px: 1.25, borderRadius: 999, bgcolor: cv.paper, boxShadow: `inset 0 0 0 1px ${cv.border}`, fontSize: 13, fontWeight: 600, color: cv.text, fontVariantNumeric: 'tabular-nums' as const, whiteSpace: 'nowrap' as const }
 const rise = (delay = 0) => ({ animation: `homeIn .45s cubic-bezier(.22,1,.36,1) ${delay}s both`, '@keyframes homeIn': { from: { opacity: 0, transform: 'translateY(12px)' } } })
 
 export default function SubjectHome({ userProfile, userProgress, currentSubject, onSelectSubject, onOpenSubject, onAddSubject }: SubjectHomeProps) {
@@ -103,54 +104,50 @@ export default function SubjectHome({ userProfile, userProgress, currentSubject,
 
     return (
         <Box component="main" sx={{ maxWidth: 880, mx: 'auto', px: { xs: 2, sm: 3 }, pt: { xs: 2.5, sm: 4 }, pb: 4, boxSizing: 'border-box', textAlign: 'left', color: cv.text }}>
-            {/* Greeting */}
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.75, ...rise() }}>
-                <Mascot size={56} mood="happy" />
-                <Box>
-                    <Typography component="h1" sx={{ fontFamily: cv.display, fontSize: { xs: 22, sm: 26 }, fontWeight: 700, letterSpacing: '-0.025em', lineHeight: 1.2 }}>
+            {/* Greeting, with today's goal and streak as two small chips */}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap', ...rise() }}>
+                <Mascot size={48} mood="happy" />
+                <Box sx={{ flex: 1, minWidth: 180 }}>
+                    <Typography component="h1" sx={{ fontFamily: cv.display, fontSize: { xs: 21, sm: 24 }, fontWeight: 700, letterSpacing: '-0.025em', lineHeight: 1.2 }}>
                         {greeting()}{userProfile.name ? `, ${userProfile.name}` : ''}
                     </Typography>
-                    <Typography sx={{ color: cv.muted, fontSize: 14.5 }}>
-                        {today >= DAILY_GOAL ? 'Objetivo de hoje cumprido. Que orgulho!' : 'Bora aprender um bocadinho hoje?'}
+                    <Typography sx={{ color: cv.muted, fontSize: 14 }}>
+                        {today >= DAILY_GOAL ? 'Objetivo de hoje cumprido!' : 'Bora aprender um bocadinho hoje?'}
                     </Typography>
+                </Box>
+                <Box sx={{ display: 'flex', gap: 0.75 }}>
+                    <Box title="Objetivo de hoje" sx={chipSx}>
+                        <Ring value={today / DAILY_GOAL} color={today >= DAILY_GOAL ? cv.green : cv.accent} size={18} stroke={3} />
+                        {Math.min(today, DAILY_GOAL)}/{DAILY_GOAL} XP
+                    </Box>
+                    <Box title="Lições seguidas sem erros" sx={{ ...chipSx, color: userProgress.streak ? cv.butter : cv.muted }}>
+                        <LocalFireDepartment sx={{ fontSize: 17 }} />{userProgress.streak}
+                    </Box>
                 </Box>
             </Box>
 
-            {/* Carry on: the next lesson, with what comes after it */}
+            {/* Carry on: one simple card with the next lesson */}
             {focus && (
-                <Box key={focus} sx={{ mt: 3, borderRadius: '28px', bgcolor: cv.paper, boxShadow: `inset 0 0 0 1px ${cv.border}`, display: 'grid', gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'minmax(0, 1fr) 300px' }, overflow: 'hidden', ...rise(0.06) }}>
-                    <Box sx={{ p: { xs: 2.5, sm: 3.5 }, minWidth: 0 }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
-                            <SubjectTile subject={focus} size={34} />
-                            <Box sx={{ minWidth: 0 }}>
-                                <Typography sx={{ fontSize: 13.5, fontWeight: 600, color }}>{subjectName(focus)}</Typography>
-                                {next && <Typography sx={{ fontSize: 12.5, color: cv.muted }}>Lição {next.lessonNumber} de {heroLessons.length}</Typography>}
-                            </Box>
-                        </Box>
+                <Box key={focus} sx={{ mt: 2.5, p: { xs: 2.25, sm: 3 }, borderRadius: '24px', bgcolor: cv.paper, boxShadow: `inset 0 0 0 1px ${cv.border}`, ...rise(0.06) }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <SubjectTile subject={focus} size={28} />
+                        <Typography sx={{ fontSize: 13.5, fontWeight: 600, color, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{subjectName(focus)}</Typography>
+                        {next && <Typography sx={{ fontSize: 12.5, color: cv.muted, whiteSpace: 'nowrap' }}>Lição {next.lessonNumber} de {heroLessons.length}</Typography>}
+                    </Box>
 
-                        {planning ? (
-                            <>
-                                <Typography sx={{ fontFamily: cv.display, fontSize: { xs: 24, sm: 30 }, fontWeight: 700, letterSpacing: '-0.03em', lineHeight: 1.12, mt: 2.25, ...shimmerText }}>
-                                    A preparar o teu plano…
-                                </Typography>
-                                <Typography sx={{ color: cv.muted, fontSize: 14.5, mt: 1 }}>O Mivvi está a organizar os temas de {subjectName(focus)} do teu ano.</Typography>
-                            </>
-                        ) : (
-                            <>
-                                <Typography sx={{ fontFamily: cv.display, fontSize: { xs: 24, sm: 30 }, fontWeight: 700, letterSpacing: '-0.03em', lineHeight: 1.12, mt: 2.25 }}>
-                                    {next ? next.title : 'Tudo concluído!'}
-                                </Typography>
-                                {(locked || next?.description) && (
-                                    <Typography sx={{ color: cv.muted, fontSize: 14.5, mt: 1, maxWidth: 480, lineHeight: 1.5 }}>
-                                        {locked && next ? `Precisas de ${next.requiredXp} XP para abrir esta lição.` : next?.description}
-                                    </Typography>
-                                )}
-                            </>
-                        )}
+                    <Typography sx={{ fontFamily: cv.display, fontSize: { xs: 23, sm: 28 }, fontWeight: 700, letterSpacing: '-0.03em', lineHeight: 1.15, mt: 1.75, ...(planning && shimmerText) }}>
+                        {planning ? 'A preparar o teu plano…' : next ? next.title : 'Tudo concluído!'}
+                    </Typography>
+                    {(planning || locked || next?.description) && (
+                        <Typography sx={{ color: cv.muted, fontSize: 14.5, mt: 0.75, maxWidth: 520, lineHeight: 1.5 }}>
+                            {planning ? `O Mivvi está a organizar os temas de ${subjectName(focus)} do teu ano.` : locked && next ? `Precisas de ${next.requiredXp} XP para abrir esta lição.` : next?.description}
+                        </Typography>
+                    )}
 
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 2.5, flexWrap: 'wrap' }}>
                         {next && (
                             <Box component="button" id="tutorial-first-lesson" disabled={locked || planning} onClick={open}
-                                sx={{ mt: 3, display: 'inline-flex', alignItems: 'center', gap: 1, height: 46, px: 2.75, border: 0, borderRadius: 999, font: 'inherit', fontSize: 15, fontWeight: 600, cursor: 'pointer',
+                                sx={{ display: 'inline-flex', alignItems: 'center', gap: 1, height: 44, px: 2.5, border: 0, borderRadius: 999, font: 'inherit', fontSize: 15, fontWeight: 600, cursor: 'pointer',
                                     bgcolor: '#fff', color: '#0d0d0d', transition: 'background-color .15s, transform .15s',
                                     '&:hover:not(:disabled)': { bgcolor: '#e6e6e6', '& .hero-go': { transform: 'translateX(3px)' } }, '&:active:not(:disabled)': { transform: 'scale(.98)' },
                                     '&:disabled': { bgcolor: cv.surface, color: cv.muted, cursor: 'default' } }}>
@@ -159,57 +156,22 @@ export default function SubjectHome({ userProfile, userProgress, currentSubject,
                                 {!locked && <ArrowForward className="hero-go" sx={{ fontSize: 18, transition: 'transform .2s' }} />}
                             </Box>
                         )}
+                        {upcoming[0] && !planning && (
+                            <Typography sx={{ flex: 1, minWidth: 0, fontSize: 13, color: cv.faint, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                A seguir: <Box component="span" sx={{ color: cv.muted }}>{upcoming[0].title}</Box>
+                            </Typography>
+                        )}
                     </Box>
 
-                    {/* Up next */}
-                    <Box sx={{ minWidth: 0, p: { xs: 2.5, sm: 3 }, pt: { xs: 0, md: 3 }, borderLeft: { md: `1px solid ${cv.border}` }, bgcolor: { md: 'rgba(255,255,255,.015)' } }}>
-                        <Typography sx={{ fontSize: 12, fontWeight: 600, color: cv.muted, textTransform: 'uppercase', letterSpacing: '.06em', mb: 1.5, display: { xs: 'none', md: 'block' } }}>Próximas lições</Typography>
-                        <Box sx={{ display: 'grid', gap: 0.5 }}>
-                            {(next ? [next, ...upcoming] : []).map((l, i) => (
-                                <Box key={l.id} sx={{ display: 'flex', alignItems: 'center', gap: 1.25, py: 0.75, minWidth: 0, opacity: i === 0 ? 1 : 0.7 }}>
-                                    <Box sx={{ width: 26, height: 26, borderRadius: '8px', flexShrink: 0, display: 'grid', placeItems: 'center', fontSize: 12, fontWeight: 700,
-                                        bgcolor: i === 0 ? color : 'rgba(255,255,255,.06)', color: i === 0 ? '#1d2742' : cv.muted }}>{l.lessonNumber}</Box>
-                                    {planning
-                                        ? <Box sx={{ flex: 1, height: 10, borderRadius: 999, background: 'linear-gradient(90deg, #232323 25%, #2e2e2e 37%, #232323 63%)', backgroundSize: '400% 100%', animation: 'homeSkel 1.4s ease infinite', '@keyframes homeSkel': { from: { backgroundPosition: '100% 50%' }, to: { backgroundPosition: '0 50%' } } }} />
-                                        : <Typography sx={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: i === 0 ? 600 : 500, lineHeight: 1.3, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{l.title}</Typography>}
-                                </Box>
-                            ))}
-                        </Box>
-                        <Box sx={{ mt: 2 }}>
-                            <Box sx={{ height: 4, borderRadius: 999, bgcolor: 'rgba(255,255,255,.08)', overflow: 'hidden' }}>
-                                <Box sx={{ height: '100%', width: `${heroLessons.length ? (done / heroLessons.length) * 100 : 0}%`, minWidth: done ? 6 : 0, bgcolor: color, borderRadius: 999, transition: 'width .6s ease' }} />
-                            </Box>
-                            <Typography sx={{ fontSize: 12.5, color: cv.muted, mt: 0.75 }}>{done} de {heroLessons.length} lições concluídas</Typography>
-                        </Box>
+                    {/* Progress in the subject */}
+                    <Box sx={{ mt: 2.5, height: 4, borderRadius: 999, bgcolor: 'rgba(255,255,255,.07)', overflow: 'hidden' }}>
+                        <Box sx={{ height: '100%', width: `${heroLessons.length ? (done / heroLessons.length) * 100 : 0}%`, minWidth: done ? 6 : 0, bgcolor: color, borderRadius: 999, transition: 'width .6s ease' }} />
                     </Box>
                 </Box>
             )}
 
-            {/* Today: one strip with the goal and the streak */}
-            <Box sx={{ mt: 1.5, display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', borderRadius: '22px', bgcolor: cv.paper, boxShadow: `inset 0 0 0 1px ${cv.border}`, ...rise(0.12) }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, p: 1.75, minWidth: 0 }}>
-                    <Ring value={today / DAILY_GOAL} color={cv.accent} size={40} stroke={4}>
-                        <Typography sx={{ fontSize: 10, fontWeight: 700 }}>{Math.min(100, Math.round((today / DAILY_GOAL) * 100))}%</Typography>
-                    </Ring>
-                    <Box sx={{ minWidth: 0 }}>
-                        <Typography sx={{ fontSize: 14, fontWeight: 600 }}>Objetivo de hoje</Typography>
-                        <Typography sx={{ fontSize: 12.5, color: cv.muted, fontVariantNumeric: 'tabular-nums' }}>{Math.min(today, DAILY_GOAL)} de {DAILY_GOAL} XP</Typography>
-                    </Box>
-                </Box>
-                <Box sx={{ width: '1px', height: 32, bgcolor: cv.border }} />
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, p: 1.75, minWidth: 0 }}>
-                    <Box sx={{ width: 40, height: 40, borderRadius: '12px', display: 'grid', placeItems: 'center', bgcolor: userProgress.streak ? cv.butter : cv.surface, color: userProgress.streak ? '#1d2742' : cv.faint, flexShrink: 0 }}>
-                        <LocalFireDepartment sx={{ fontSize: 22 }} />
-                    </Box>
-                    <Box sx={{ minWidth: 0 }}>
-                        <Typography sx={{ fontSize: 14, fontWeight: 600 }}>{userProgress.streak} {userProgress.streak === 1 ? 'seguida' : 'seguidas'}</Typography>
-                        <Typography sx={{ fontSize: 12.5, color: cv.muted }}>Lições sem erros</Typography>
-                    </Box>
-                </Box>
-            </Box>
-
             {/* Subjects */}
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, mt: 4, mb: 1.5, ...rise(0.16) }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, mt: 3.5, mb: 1.5, ...rise(0.12) }}>
                 <Typography sx={{ fontSize: 15, fontWeight: 600 }}>
                     As tuas disciplinas <Box component="span" sx={{ color: cv.muted, fontWeight: 500 }}>· {subjects.length}</Box>
                 </Typography>

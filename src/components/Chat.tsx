@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Box, Typography, IconButton } from '@mui/material'
 import { Search, PersonAddAlt1Rounded, ChatBubbleOutlineRounded } from '@mui/icons-material'
-import { ChatSummary, PublicProfile, isOnline, isUnread, pairId } from '../services/social'
+import { ChatSummary, PublicProfile, isOnline, isUnread, pairId, receiptOf } from '../services/social'
+import ReceiptIcon from './Receipt'
 import Conversation from './Conversation'
 import { FriendView } from '../services/useSocial'
 import { Avatar } from './Friends'
@@ -51,13 +52,13 @@ export default function Chat({ me, friends, incomingCount, chats, openWith, onAd
   const showConversation = !!current
 
   return (
-    <Box sx={{ maxWidth: 1100, mx: 'auto', px: { xs: 0, md: 3 }, pt: { xs: 0, md: 3 }, boxSizing: 'border-box', textAlign: 'left', color: cv.text }}>
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '300px 1fr' }, height: { xs: 'auto', md: 'calc(100dvh - 56px - 24px - 104px)' }, minHeight: { md: 460 },
-        borderRadius: { md: '24px' }, boxShadow: { md: `inset 0 0 0 1px ${cv.border}` }, overflow: 'hidden', bgcolor: { md: cv.paper } }}>
+    <Box sx={{ maxWidth: 1100, mx: 'auto', px: { xs: 0, sm: 2, md: 3 }, pt: { xs: 0, sm: 3 }, boxSizing: 'border-box', textAlign: 'left', color: cv.text }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '260px 1fr', md: '300px 1fr' }, height: { xs: 'auto', sm: 'calc(100dvh - 56px - 24px - 108px)' }, minHeight: { sm: 420 },
+        borderRadius: { sm: '24px' }, boxShadow: { sm: `inset 0 0 0 1px ${cv.border}` }, overflow: 'hidden', bgcolor: { sm: cv.paper } }}>
 
         {/* Sidebar: direct messages */}
         {showList && (
-          <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: 0, borderRight: { md: `1px solid ${cv.border}` }, bgcolor: { md: '#181818' } }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: 0, borderRight: { sm: `1px solid ${cv.border}` }, bgcolor: { sm: '#181818' } }}>
             <Box sx={{ px: 2, pt: { xs: 2.5, md: 2 }, pb: 1.25, display: 'flex', alignItems: 'center', gap: 1 }}>
               <Typography component="h1" sx={{ flex: 1, fontFamily: cv.display, fontSize: { xs: 24, md: 18 }, fontWeight: 700, letterSpacing: '-0.02em' }}>Mensagens</Typography>
               <IconButton onClick={() => { soundManager.playClick(); onAddFriend() }} aria-label="Adicionar amigo" title="Adicionar amigo" sx={{ width: 34, height: 34, boxShadow: `inset 0 0 0 1px ${cv.border}` }}>
@@ -96,6 +97,9 @@ export default function Chat({ me, friends, incomingCount, chats, openWith, onAd
                       </Box>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                         <Typography sx={{ flex: 1, fontSize: 12.5, color: unread ? cv.text : cv.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {chat?.lastText && chat.lastFrom === me.uid && (
+                            <Box component="span" sx={{ mr: 0.5, position: 'relative', top: '-1px' }}><ReceiptIcon state={receiptOf({ at: chat.lastAt || 0 }, chat, f.uid)} size={14} /></Box>
+                          )}
                           {chat?.lastText ? `${chat.lastFrom === me.uid ? 'Tu: ' : ''}${chat.lastText}` : 'Diz olá 👋'}
                         </Typography>
                         {unread && <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: cv.accent, flexShrink: 0 }} />}
