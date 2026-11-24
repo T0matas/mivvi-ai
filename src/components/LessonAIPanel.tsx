@@ -87,12 +87,11 @@ export default function LessonAIPanel({ open, onClose, mobile, context, contextL
 
   return (
     <>
-      {mobile && <Box onClick={onClose} sx={{ position: 'fixed', inset: 0, zIndex: 1340, bgcolor: 'rgba(0,0,0,.5)', animation: 'aiFade .2s ease both', '@keyframes aiFade': { from: { opacity: 0 } } }} />}
       <Box component="aside" aria-label="Pergunta ao Mivvi"
         sx={{
           position: 'fixed', zIndex: 1350, display: 'flex', flexDirection: 'column', color: cv.text, textAlign: 'left',
           ...(mobile
-            ? { left: 0, right: 0, bottom: 0, height: '82dvh', borderRadius: '24px 24px 0 0', bgcolor: '#191919', boxShadow: `0 -1px 0 ${cv.border}, 0 -20px 50px rgba(0,0,0,.5)`, animation: 'aiUp .3s cubic-bezier(.22,1,.36,1) both', '@keyframes aiUp': { from: { transform: 'translateY(100%)' } } }
+            ? { inset: 0, height: '100dvh', borderRadius: 0, bgcolor: '#191919', animation: 'aiMobileIn .28s cubic-bezier(.22,1,.36,1) both', '@keyframes aiMobileIn': { from: { transform: 'translateX(100%)' } } }
             : { top: 10, right: 10, bottom: 10, width: PANEL_WIDTH, borderRadius: '22px', bgcolor: '#191919', boxShadow: `inset 0 0 0 1px ${cv.border}, 0 20px 50px rgba(0,0,0,.45)`, animation: 'aiIn .3s cubic-bezier(.22,1,.36,1) both', '@keyframes aiIn': { from: { opacity: 0, transform: 'translateX(16px)' } } }),
           '@keyframes aiDot': { '0%, 80%, 100%': { opacity: 0.25 }, '40%': { opacity: 1 } },
         }}>
@@ -105,7 +104,7 @@ export default function LessonAIPanel({ open, onClose, mobile, context, contextL
         </Box>
 
         {/* Conversation */}
-        <Box ref={scroller} sx={{ flex: 1, overflowY: 'auto', px: 2, py: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <Box ref={scroller} sx={{ flex: 1, minHeight: 0, overflowY: 'auto', px: 2, py: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
           {messages.length === 0 && (
             <Box sx={{ my: 'auto', display: 'grid', justifyItems: 'center', textAlign: 'center', gap: 1, py: 2 }}>
               <Box component="img" src="/mivvi-logo.svg" alt="Mivvi" sx={{ width: 58, height: 58, borderRadius: '17px' }} />

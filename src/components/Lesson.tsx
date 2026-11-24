@@ -92,8 +92,8 @@ export default function Lesson({ lessonId, onComplete, onMistake, onBack, userPr
 
   // The Mivvi AI panel beside the lesson (a sheet on smaller screens).
   const narrow = useMediaQuery('(max-width: 999px)')
-  // Keep Mivvi open throughout the lesson, including when exercises begin.
-  const [aiOpen, setAiOpen] = useState(true)
+  // Keep Mivvi open on desktop; on phones it stays one tap away in the lesson header.
+  const [aiOpen, setAiOpen] = useState(() => !narrow)
   const inset = !narrow && aiOpen ? PANEL_WIDTH + 20 : 0
 
   const exercise = exercises[index]
