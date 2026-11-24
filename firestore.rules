@@ -97,6 +97,57 @@ service cloud.firestore {
       }
     }
 
+    // Study groups: members talk; the admins rename and add people; anyone can leave.
+    match /groups/{gid} {
+      function isMember() { return signedIn() && me() in resource.data.members; }
+      function memberOfGroup() { return signedIn() && me() in get(/databases/$(database)/documents/groups/$(gid)).data.members; }
+      allow get, list: if isMember();
+      allow create: if signedIn()
+        && request.resource.data.createdBy == me()
+        && me() in request.resource.data.members
+        && request.resource.data.admins == [me()]
+        && request.resource.data.members.size() <= 50;
+      allow update: if isMember()
+        && request.resource.data.createdBy == resource.data.createdBy
+        && request.resource.data.admins == resource.data.admins
+        && (
+          // activity: last message, reads, delivered, typing
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['members', 'memberNames', 'name', 'color'])
+          // admins manage the group
+          || me() in resource.data.admins
+          // anyone can leave (only removing themself)
+          || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members', 'memberNames'])
+              && !(me() in request.resource.data.members)
+              && request.resource.data.members.size() == resource.data.members.size() - 1)
+        )
+        && request.resource.data.members.size() <= 50;
+      allow delete: if signedIn() && me() in resource.data.admins;
+
+      match /messages/{msg} {
+        allow read: if memberOfGroup();
+        allow create: if memberOfGroup()
+          && request.resource.data.from == me()
+          && request.resource.data.text is string
+          && request.resource.data.text.size() <= 2000
+          && (request.resource.data.text.size() > 0 || request.resource.data.get('kind', 'text') != 'text');
+        allow update: if memberOfGroup()
+          && resource.data.from == me()
+          && request.resource.data.from == me()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'editedAt', 'deleted', 'fileId', 'name'])
+          && request.resource.data.text is string
+          && request.resource.data.text.size() <= 2000;
+        allow delete: if signedIn() && resource.data.from == me();
+      }
+      match /files/{file} {
+        allow read: if memberOfGroup();
+        allow create: if memberOfGroup()
+          && request.resource.data.from == me()
+          && request.resource.data.data is string
+          && request.resource.data.data.size() < 1000000;
+        allow delete: if signedIn() && resource.data.from == me();
+      }
+    }
+
     // Calls: WebRTC handshake between two friends.
     match /calls/{call} {
       allow read: if signedIn() && (resource.data.from == me() || resource.data.to == me());

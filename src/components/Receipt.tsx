@@ -10,13 +10,13 @@ import { cv } from '../theme'
 export const RECEIPT_LABEL: Record<Receipt, string> = { pending: 'A enviar…', sent: 'Enviada', delivered: 'Entregue', seen: 'Vista' }
 
 /** Under my last message: "Enviada", "Entregue" or [avatar] "Vista · 17:02". */
-export function SeenLine({ state, at, friend }: { state: Receipt; at?: string; friend: { name: string; photo?: string | null } }) {
+export function SeenLine({ state, at, friend, label }: { state: Receipt; at?: string; friend: { name: string; photo?: string | null }; label?: string }) {
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 0.75, mt: 0.75, pr: 0.25 }}>
       {state === 'seen' ? <Avatar name={friend.name} photo={friend.photo} size={16} />
         : <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: state === 'delivered' ? cv.muted : 'transparent', boxShadow: state === 'delivered' ? 'none' : `inset 0 0 0 1.5px ${cv.faint}` }} />}
       <Typography sx={{ fontSize: 11.5, fontWeight: 500, color: state === 'seen' ? cv.muted : cv.faint }}>
-        {RECEIPT_LABEL[state]}{state === 'seen' && at ? ` · ${at}` : ''}
+        {label || <>{RECEIPT_LABEL[state]}{state === 'seen' && at ? ` · ${at}` : ''}</>}
       </Typography>
     </Box>
   )

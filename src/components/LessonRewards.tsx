@@ -1,6 +1,6 @@
 import { Dialog, Box, Typography } from '@mui/material';
 import { useState, useEffect } from 'react';
-import { BoltOutlined, TrackChangesOutlined, CheckCircleOutline, ArrowForward } from '@mui/icons-material';
+import { TrackChangesOutlined, CheckCircleOutline, ArrowForward } from '@mui/icons-material';
 import { soundManager } from '../utils/soundEffects';
 import { t } from '../utils/translations';
 import Mascot from './Mascot';
@@ -37,7 +37,7 @@ function CountUp({ to, run, suffix = '' }: { to: number; run: boolean; suffix?: 
     return <>{value}{suffix}</>;
 }
 
-export default function LessonRewards({ open, xpGained, correctAnswers, totalQuestions, onClose, language = 'pt-BR', outfit }: LessonRewardsProps) {
+export default function LessonRewards({ open, correctAnswers, totalQuestions, onClose, language = 'pt-BR', outfit }: LessonRewardsProps) {
     const [ready, setReady] = useState(false);
     const accuracy = totalQuestions ? Math.round((correctAnswers / totalQuestions) * 100) : 0;
     const great = accuracy >= 80;
@@ -51,7 +51,6 @@ export default function LessonRewards({ open, xpGained, correctAnswers, totalQue
 
     const line = great ? 'Excelente! Estás a dominar esta matéria.' : accuracy >= 50 ? 'Bom trabalho! Mais uma lição e fica perfeito.' : 'Cada erro é uma pista. Vamos continuar!';
     const stats = [
-        { icon: <BoltOutlined />, color: cv.butter, value: xpGained, suffix: '', label: 'XP' },
         { icon: <TrackChangesOutlined />, color: '#9fc9ff', value: accuracy, suffix: '%', label: t('accuracy', language) },
         { icon: <CheckCircleOutline />, color: cv.mint, value: correctAnswers, suffix: `/${totalQuestions}`, label: t('hits', language) },
     ];

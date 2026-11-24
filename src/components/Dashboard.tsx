@@ -7,7 +7,6 @@ import SubjectHome from './SubjectHome'
 import SubjectPicker from './SubjectPicker'
 import AccountPrivacy from './AccountPrivacy'
 // ... imports
-import Missions from './Missions'
 import Profile from './Profile'
 import AITutor from './AITutor'
 import Library from './Library'
@@ -21,8 +20,8 @@ import { PublicProfile } from '../services/social'
 import { soundManager } from '../utils/soundEffects'
 import { cv } from '../theme'
 
-// Tabs: 0 Início · 1 Missões · 2 Biblioteca · 3 Chat · 4 Mivvi · 5 Perfil · 6 Conta
-const TAB = { home: 0, missions: 1, library: 2, chat: 3, tutor: 4, profile: 5, account: 6 } as const
+// Tabs: 0 Início · 1 Biblioteca · 2 Chat · 3 Mivvi · 4 Perfil · 5 Conta
+const TAB = { home: 0, library: 1, chat: 2, tutor: 3, profile: 4, account: 5 } as const
 
 interface DashboardProps {
   // ...
@@ -37,7 +36,7 @@ interface DashboardProps {
   onClaimMission?: (missionId: string, reward: number) => void
 }
 
-export default function Dashboard({ userProgress, userProfile, onStartLesson, onRefillHearts, onPurchaseOutfit, onEquipOutfit, onUpdateProfile, onClaimMission }: DashboardProps) {
+export default function Dashboard({ userProgress, userProfile, onStartLesson, onRefillHearts, onPurchaseOutfit, onEquipOutfit, onUpdateProfile }: DashboardProps) {
   const [activeTab, setActiveTab] = useState(0)
   const [pickerOpen, setPickerOpen] = useState(false)
 
@@ -50,8 +49,6 @@ export default function Dashboard({ userProgress, userProfile, onStartLesson, on
     return userProfile.selectedSubjects.length > 0 ? userProfile.selectedSubjects[0] : null;
   });
 
-  // Use userProfile.language for translations
-  const lang = userProfile.language || 'pt-BR';
 
   // ── Friends and chat ──
   const user = useAuthUser()
@@ -116,7 +113,7 @@ export default function Dashboard({ userProgress, userProfile, onStartLesson, on
         currentOutfit={userProgress.currentOutfit}
         onOpenProfile={() => setActiveTab(TAB.profile)}
         onOpenAccount={() => setActiveTab(TAB.account)}
-        onHome={() => setActiveTab(0)}
+        onHome={() => setActiveTab(TAB.home)}
       />
 
 
@@ -124,7 +121,7 @@ export default function Dashboard({ userProgress, userProfile, onStartLesson, on
       {/* Header removed - moved to GameMap Unit Banner */}
       {/* Each section fades in when the tab changes (opacity only, so fixed children stay put). */}
       <Box key={activeTab} sx={{ animation: 'tabIn .28s ease backwards', '@keyframes tabIn': { from: { opacity: 0 } }, '@media (prefers-reduced-motion: reduce)': { animation: 'none' } }}>
-      {activeTab === 0 && (
+      {activeTab === TAB.home && (
         <SubjectHome
           userProfile={userProfile}
           userProgress={userProgress}
@@ -140,28 +137,11 @@ export default function Dashboard({ userProgress, userProfile, onStartLesson, on
         />
       )}
 
-      {activeTab === 1 && (
-        <Missions
-          language={lang}
-          gems={userProgress.gems}
-          dailyXP={userProgress.dailyXP || 0}
-          dailyLessons={userProgress.dailyLessons || 0}
-          streak={userProgress.streak}
-          dailyPerfectLessons={userProgress.dailyPerfectLessons || 0}
-          weeklyXP={userProgress.weeklyXP || 0}
-          claimedMissionIds={userProgress.claimedMissionIds || []}
-          onClaimReward={(amount, missionId) => {
-            if (onClaimMission && missionId) {
-              onClaimMission(missionId, amount);
-            }
-          }}
-        />
-      )}
 
       {activeTab === TAB.library && <Library userProfile={userProfile} />}
 
       {activeTab === TAB.chat && (me ? (
-        <Chat me={me} friends={social.friends} incomingCount={social.incoming.length} chats={social.chats} openWith={chatWith}
+        <Chat me={me} friends={social.friends} incomingCount={social.incoming.length} chats={social.chats} groups={social.groups} openWith={chatWith}
           onAddFriend={openAdd} onOpenRequests={() => setActiveTab(TAB.profile)} />
       ) : (
         <Box sx={{ maxWidth: 440, mx: 'auto', px: 2.5, pt: 6, display: 'grid', justifyItems: 'center', textAlign: 'center', color: cv.text }}>

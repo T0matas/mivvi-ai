@@ -1,7 +1,7 @@
 import { Box, Typography, Dialog } from '@mui/material'
 import { useEffect, useState, ReactNode } from 'react'
 import { onAuthStateChanged, signOut, User } from 'firebase/auth'
-import { CheckRounded, DownloadRounded, RefreshRounded, DeleteOutlineRounded, PhoneIphoneRounded, AutoAwesomeRounded, AccountCircleRounded, VolumeUpRounded, SchoolRounded } from '@mui/icons-material'
+import { CheckRounded, DownloadRounded, RefreshRounded, DeleteOutlineRounded, PhoneIphoneRounded, AccountCircleRounded, VolumeUpRounded, SchoolRounded } from '@mui/icons-material'
 import { auth } from '../firebase'
 import { UserProfile, UserProgress } from '../types'
 import { YEARS, isSecondary, courseInfo } from '../data/ptCurriculum'
@@ -150,8 +150,8 @@ export default function AccountPrivacy({ userProfile, userProgress, onUpdateProf
             {/* Privacy */}
             <Section title="Privacidade" delay={0.18}>
                 <Row first icon={<PhoneIphoneRounded />} title="Guardado neste dispositivo"
-                    detail={`O teu perfil${n ? ` (${n}.º ano)` : ''}, progresso (${userProgress.xp} XP, ${userProgress.completedLessons.length} lições), biblioteca e ${plans} ${plans === 1 ? 'plano de lições' : 'planos de lições'}. ${user ? 'Com conta, ficam também guardados na tua conta para usares noutro dispositivo.' : 'Sem conta, não saem do teu dispositivo.'}`} />
-                <Row icon={<AutoAwesomeRounded />} title="Enviado para a IA"
+                    detail={`O teu perfil${n ? ` (${n}.º ano)` : ''}, progresso (${userProgress.completedLessons.length} lições), biblioteca e ${plans} ${plans === 1 ? 'plano de lições' : 'planos de lições'}. ${user ? 'Com conta, ficam também guardados na tua conta para usares noutro dispositivo.' : 'Sem conta, não saem do teu dispositivo.'}`} />
+                <Row icon={<Mascot size={24} animated={false} />} title="Enviado para a IA"
                     detail="As tuas mensagens ao Mivvi, as fotos que anexas e o áudio do microfone vão para o serviço de IA (Groq) só para gerar a resposta. O Mivvi não os guarda." />
                 <Row icon={<AccountCircleRounded />} title="Conta Google"
                     detail={user ? 'Usamos o teu nome e email apenas para iniciares sessão.' : 'Sem conta, nada fica associado a ti fora deste dispositivo.'} />

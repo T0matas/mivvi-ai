@@ -4,7 +4,7 @@ import {
   ArrowBack, SendRounded, AttachFileRounded, MicRounded, DeleteOutlineRounded, CallRounded, VideocamRounded,
   PlayArrowRounded, PauseRounded, BlockRounded, EditRounded, ContentCopyRounded, MoreHorizRounded, CheckRounded, InsertDriveFileRounded, DownloadRounded, CallMadeRounded, CallReceivedRounded, PhoneMissedRounded, Close,
 } from '@mui/icons-material'
-import { ChatMessage, ChatSummary, PublicProfile, isOnline, markRead, receiptOf, editMessage, deleteMessage, pairId, sendMessage, subscribeMessages, loadFile, pingTyping, stopTyping, MAX_FILE_BYTES } from '../services/social'
+import { ChatMessage, ChatSummary, PublicProfile, GroupInfo, ThreadRef, isOnline, markRead, receiptOf, seenBy, editMessage, deleteMessage, sendToThread, subscribeMessages, loadFile, pingTyping, stopTyping, MAX_FILE_BYTES } from '../services/social'
 import { FriendView } from '../services/useSocial'
 import { Avatar } from './Friends'
 import { useCalls } from './CallProvider'
@@ -54,7 +54,29 @@ async function compressImage(file: File): Promise<{ data: string; size: number }
   throw new Error('too big')
 }
 
-export default function Conversation({ me, friend, chat, mobile, onBack }: { me: PublicProfile; friend: FriendView; chat?: ChatSummary; mobile: boolean; onBack: () => void }) {
+/** A conversation: with one friend, or a group. */
+export interface Thread {
+  ref: ThreadRef
+  title: string
+  isGroup: boolean
+  members: { uid: string; name: string; photo?: string | null }[]
+  friend?: FriendView
+  group?: GroupInfo
+  color?: string
+}
+
+export function GroupAvatar({ name, color, size = 36 }: { name: string; color?: string; size?: number }) {
+  const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join('') || '#'
+  return (
+    <Box sx={{ width: size, height: size, borderRadius: size * 0.32 + 'px', bgcolor: color || '#a9c8f5', color: '#1d2742', display: 'grid', placeItems: 'center', fontSize: size * 0.36, fontWeight: 800, flexShrink: 0, letterSpacing: '-0.02em' }}>{initials}</Box>
+  )
+}
+
+export default function Conversation({ me, thread, chat, mobile, onBack, onOpenInfo }: { me: PublicProfile; thread: Thread; chat?: ChatSummary; mobile: boolean; onBack: () => void; onOpenInfo?: () => void }) {
+  const friend = thread.friend
+  const others = thread.members.filter((x) => x.uid !== me.uid)
+  const otherIds = others.map((x) => x.uid)
+  const memberOf = (uid: string) => thread.members.find((x) => x.uid === uid) || { uid, name: thread.group?.memberNames?.[uid] || 'Alguém', photo: null }
   const { call, busy: inCall } = useCalls()
   const [messages, setMessages] = useState<ChatMessage[] | null>(null)
   const [text, setText] = useState('')
@@ -76,30 +98,40 @@ export default function Conversation({ me, friend, chat, mobile, onBack }: { me:
   const lastCount = useRef(0)
   const lastTyping = useRef<number | undefined>(undefined)
   const typingTimer = useRef<ReturnType<typeof setTimeout>>()
-  const chatId = pairId(me.uid, friend.uid)
+  const ref = thread.ref
+  const users = thread.isGroup ? undefined : [me.uid, friend!.uid]
+  const post = (text: string, extra?: Partial<ChatMessage>, file?: { data: string; mime: string; name: string; size: number }) => sendToThread(ref, { uid: me.uid, name: me.name }, text, extra, file, users)
+  const [typer, setTyper] = useState('')
 
-  useEffect(() => subscribeMessages(chatId, (list) => {
+  useEffect(() => subscribeMessages(ref, (list) => {
     if (lastCount.current && list.length > lastCount.current && list[list.length - 1].from !== me.uid) { soundManager.playMessage(); setTyping(false) }
     lastCount.current = list.length
     setMessages(list)
     setError('')
-  }, () => setError('Não foi possível carregar as mensagens.')), [chatId, me.uid])
+  }, () => setError('Não foi possível carregar as mensagens.')), [ref.col, ref.id, me.uid])  // eslint-disable-line react-hooks/exhaustive-deps
 
-  // "a escrever…": shown for a few seconds each time the friend's counter changes.
-  const theirTyping = chat?.typing?.[friend.uid]
+  // "a escrever…": shown for a few seconds each time someone's counter changes.
+  const typingSig = otherIds.map((o) => `${o}:${chat?.typing?.[o] || 0}`).join('|')
+  const prevTyping = useRef<Record<string, number> | null>(null)
   useEffect(() => {
-    const prev = lastTyping.current
-    lastTyping.current = theirTyping
-    if (prev === undefined || !theirTyping || theirTyping === prev) { if (!theirTyping) setTyping(false); return }
+    const now: Record<string, number> = {}
+    otherIds.forEach((o) => { now[o] = chat?.typing?.[o] || 0 })
+    const prev = prevTyping.current
+    prevTyping.current = now
+    if (!prev) return
+    const changed = otherIds.find((o) => now[o] && now[o] !== prev[o])
+    if (!changed) { if (otherIds.every((o) => !now[o])) setTyping(false); return }
+    setTyper(memberOf(changed).name)
     setTyping(true)
     clearTimeout(typingTimer.current)
     typingTimer.current = setTimeout(() => setTyping(false), 4500)
-  }, [theirTyping])
-  useEffect(() => () => { clearTimeout(typingTimer.current); stopTyping(me.uid, friend.uid) }, [me.uid, friend.uid])
+  }, [typingSig])  // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => { clearTimeout(typingTimer.current); stopTyping(ref, me.uid, users) }, [ref.id, me.uid])  // eslint-disable-line react-hooks/exhaustive-deps
+  void lastTyping
 
-  useEffect(() => { if (messages) markRead(me.uid, friend.uid) }, [messages?.length, me.uid, friend.uid])  // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (messages) markRead(ref, me.uid, users) }, [messages?.length, me.uid, ref.id])  // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { const el = scroller.current; if (el) el.scrollTop = el.scrollHeight }, [messages?.length, typing])
-  useEffect(() => { if (!mobile) input.current?.focus() }, [mobile, friend.uid])
+  useEffect(() => { if (!mobile) input.current?.focus() }, [mobile, ref.id])
   useEffect(() => {
     const el = input.current
     if (!el) return
@@ -119,8 +151,8 @@ export default function Conversation({ me, friend, chat, mobile, onBack }: { me:
     if (!body) return
     setText('')
     soundManager.playSend()
-    stopTyping(me.uid, friend.uid)
-    try { await sendMessage(me.uid, friend.uid, body) } catch { setText(body); fail('A mensagem não foi enviada. Tenta outra vez.') }
+    stopTyping(ref, me.uid, users)
+    try { await post(body) } catch { setText(body); fail('A mensagem não foi enviada. Tenta outra vez.') }
   }
 
   const onPickFile = async (file?: File) => {
@@ -130,11 +162,11 @@ export default function Conversation({ me, friend, chat, mobile, onBack }: { me:
     try {
       if (file.type.startsWith('image/') && !file.type.includes('gif')) {
         const { data, size } = await compressImage(file)
-        await sendMessage(me.uid, friend.uid, '', { kind: 'image', name: file.name, size, mime: 'image/jpeg' }, { data, mime: 'image/jpeg', name: file.name, size })
+        await post('', { kind: 'image', name: file.name, size, mime: 'image/jpeg' }, { data, mime: 'image/jpeg', name: file.name, size })
       } else {
         if (file.size > MAX_FILE_BYTES) { fail(`O ficheiro é grande demais (máximo ${fmtSize(MAX_FILE_BYTES)}).`); return }
         const data = await readAsDataUrl(file)
-        await sendMessage(me.uid, friend.uid, '', { kind: file.type.startsWith('image/') ? 'image' : 'file', name: file.name, size: file.size, mime: file.type || 'application/octet-stream' }, { data, mime: file.type || 'application/octet-stream', name: file.name, size: file.size })
+        await post('', { kind: file.type.startsWith('image/') ? 'image' : 'file', name: file.name, size: file.size, mime: file.type || 'application/octet-stream' }, { data, mime: file.type || 'application/octet-stream', name: file.name, size: file.size })
       }
       soundManager.playSend()
     } catch {
@@ -164,7 +196,7 @@ export default function Conversation({ me, friend, chat, mobile, onBack }: { me:
         setSending(true)
         try {
           const data = await readAsDataUrl(blob)
-          await sendMessage(me.uid, friend.uid, '', { kind: 'audio', duration: secs, size: blob.size, mime: blob.type }, { data, mime: blob.type, name: 'voz', size: blob.size })
+          await post('', { kind: 'audio', duration: secs, size: blob.size, mime: blob.type }, { data, mime: blob.type, name: 'voz', size: blob.size })
           soundManager.playSend()
         } catch { fail('Não foi possível enviar o áudio.') } finally { setSending(false) }
       }
@@ -187,13 +219,13 @@ export default function Conversation({ me, friend, chat, mobile, onBack }: { me:
     const t = editing?.text.trim()
     setEditing(null)
     if (!t || t === m.text) return
-    try { await editMessage(chatId, m.id, t, isLastMsg(m)); soundManager.playClick() } catch { fail('Não foi possível editar a mensagem.') }
+    try { await editMessage(ref, m.id, t, isLastMsg(m)); soundManager.playClick() } catch { fail('Não foi possível editar a mensagem.') }
   }
   const doDelete = async () => {
     const m = confirmDelete
     setConfirmDelete(null)
     if (!m) return
-    try { await deleteMessage(chatId, m, isLastMsg(m)); soundManager.playBack() } catch { fail('Não foi possível apagar a mensagem.') }
+    try { await deleteMessage(ref, m, isLastMsg(m)); soundManager.playBack() } catch { fail('Não foi possível apagar a mensagem.') }
   }
   // The last message I sent gets a "Vista às 17:23" / "Entregue" line under it.
   const lastMine = [...rows].reverse().find((m) => m.from === me.uid && m.kind !== 'call')
@@ -204,13 +236,16 @@ export default function Conversation({ me, friend, chat, mobile, onBack }: { me:
       {/* Header */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, px: { xs: 1, md: 2 }, height: 58, borderBottom: `1px solid ${cv.border}`, flexShrink: 0 }}>
         {mobile && <IconButton onClick={() => { soundManager.playBack(); onBack() }} aria-label="Voltar" sx={{ width: 36, height: 36 }}><ArrowBack sx={{ fontSize: 20 }} /></IconButton>}
-        <Avatar name={friend.name} photo={friend.profile?.photo} size={34} online={isOnline(friend.profile)} />
-        <Box sx={{ minWidth: 0, flex: 1 }}>
-          <Typography sx={{ fontSize: 15, fontWeight: 700, lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{friend.name}</Typography>
-          <Typography sx={{ fontSize: 12, color: typing ? cv.accent : isOnline(friend.profile) ? cv.green : cv.muted }}>{typing ? 'a escrever…' : lastSeen(friend.profile)}</Typography>
+        {thread.isGroup ? <GroupAvatar name={thread.title} color={thread.color} size={34} /> : <Avatar name={friend!.name} photo={friend!.profile?.photo} size={34} online={isOnline(friend!.profile)} />}
+        <Box component={thread.isGroup ? 'button' : 'div'} onClick={thread.isGroup ? onOpenInfo : undefined} sx={{ minWidth: 0, flex: 1, border: 0, bgcolor: 'transparent', p: 0, textAlign: 'left', font: 'inherit', color: 'inherit', cursor: thread.isGroup ? 'pointer' : 'default' }}>
+          <Typography sx={{ fontSize: 15, fontWeight: 700, lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{thread.title}</Typography>
+          <Typography sx={{ fontSize: 12, color: typing ? cv.accent : !thread.isGroup && isOnline(friend!.profile) ? cv.green : cv.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {typing ? (thread.isGroup ? `${typer} está a escrever…` : 'a escrever…') : thread.isGroup ? `${thread.members.length} membros · ${others.map((o) => o.name).slice(0, 4).join(', ')}` : lastSeen(friend!.profile)}
+          </Typography>
         </Box>
-        <IconButton onClick={() => call(friend, 'audio')} disabled={inCall} aria-label="Chamada de voz" title="Chamada de voz" sx={{ width: 38, height: 38 }}><CallRounded sx={{ fontSize: 20 }} /></IconButton>
-        <IconButton onClick={() => call(friend, 'video')} disabled={inCall} aria-label="Videochamada" title="Videochamada" sx={{ width: 38, height: 38 }}><VideocamRounded sx={{ fontSize: 21 }} /></IconButton>
+        {friend && <IconButton onClick={() => call(friend, 'audio')} disabled={inCall} aria-label="Chamada de voz" title="Chamada de voz" sx={{ width: 38, height: 38 }}><CallRounded sx={{ fontSize: 20 }} /></IconButton>}
+        {friend && <IconButton onClick={() => call(friend, 'video')} disabled={inCall} aria-label="Videochamada" title="Videochamada" sx={{ width: 38, height: 38 }}><VideocamRounded sx={{ fontSize: 21 }} /></IconButton>}
+        {thread.isGroup && <IconButton onClick={onOpenInfo} aria-label="Detalhes do grupo" title="Detalhes do grupo" sx={{ width: 38, height: 38 }}><MoreHorizRounded sx={{ fontSize: 21 }} /></IconButton>}
       </Box>
 
       {/* Messages */}
@@ -218,8 +253,8 @@ export default function Conversation({ me, friend, chat, mobile, onBack }: { me:
         {messages === null && !error && <Box sx={{ display: 'grid', placeItems: 'center', py: 6 }}><CircularProgress size={22} sx={{ color: cv.muted }} /></Box>}
         {messages !== null && rows.length === 0 && (
           <Box sx={{ display: 'grid', justifyItems: 'center', textAlign: 'center', py: 5, gap: 1 }}>
-            <Avatar name={friend.name} photo={friend.profile?.photo} size={60} />
-            <Typography sx={{ fontFamily: cv.display, fontSize: 18, fontWeight: 700, mt: 1 }}>{friend.name}</Typography>
+            {thread.isGroup ? <GroupAvatar name={thread.title} color={thread.color} size={60} /> : <Avatar name={friend!.name} photo={friend!.profile?.photo} size={60} />}
+            <Typography sx={{ fontFamily: cv.display, fontSize: 18, fontWeight: 700, mt: 1 }}>{thread.title}</Typography>
             <Typography sx={{ fontSize: 13.5, color: cv.muted, maxWidth: 280 }}>Este é o início da vossa conversa. Diz olá, liga-lhe ou combinem estudar juntos!</Typography>
           </Box>
         )}
@@ -228,7 +263,7 @@ export default function Conversation({ me, friend, chat, mobile, onBack }: { me:
           const newDay = !prev || new Date(prev.at).toDateString() !== new Date(m.at).toDateString()
           const grouped = !newDay && prev && prev.from === m.from && prev.kind !== 'call' && m.kind !== 'call' && m.at - prev.at < 5 * 60 * 1000
           const mine = m.from === me.uid
-          const who = mine ? me : { name: friend.name, photo: friend.profile?.photo }
+          const who = mine ? me : memberOf(m.from)
           return (
             <Fragment key={m.id}>
               {newDay && (
@@ -238,7 +273,7 @@ export default function Conversation({ me, friend, chat, mobile, onBack }: { me:
                   <Box sx={{ flex: 1, height: '1px', bgcolor: cv.border }} />
                 </Box>
               )}
-              {m.kind === 'call' ? <CallRow m={m} mine={mine} name={friend.name} /> : (
+              {m.kind === 'call' ? <CallRow m={m} mine={mine} name={thread.title} /> : (
                 <Box onClick={() => { if (mobile && !m.deleted && !editing) setMenuFor(menuFor === m.id ? null : m.id) }}
                   sx={{ position: 'relative', display: 'flex', gap: 1.25, mt: grouped ? 0.25 : 1.5, px: 0.75, py: 0.25, mx: -0.75, borderRadius: '10px',
                     bgcolor: menuFor === m.id || editing?.id === m.id ? 'rgba(255,255,255,.04)' : 'transparent',
@@ -262,7 +297,7 @@ export default function Conversation({ me, friend, chat, mobile, onBack }: { me:
                   <Box sx={{ minWidth: 0, flex: 1 }}>
                     {!grouped && (
                       <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1 }}>
-                        <Typography sx={{ fontSize: 14, fontWeight: 700 }}>{mine ? 'Tu' : friend.name}</Typography>
+                        <Typography sx={{ fontSize: 14, fontWeight: 700 }}>{mine ? 'Tu' : who.name}</Typography>
                         <Typography sx={{ fontSize: 11.5, color: cv.faint }}>{time(m.at)}</Typography>
                       </Box>
                     )}
@@ -284,14 +319,20 @@ export default function Conversation({ me, friend, chat, mobile, onBack }: { me:
                           <Box component="button" onClick={() => saveEdit(m)} sx={{ ...miniBtn, bgcolor: '#fff', color: '#0d0d0d' }}><CheckRounded sx={{ fontSize: 15 }} />Guardar</Box>
                         </Box>
                       </Box>
-                    ) : m.kind === 'image' && m.fileId ? <ImageMsg chatId={chatId} m={m} onOpen={setViewer} />
-                      : m.kind === 'file' && m.fileId ? <FileMsg chatId={chatId} m={m} />
-                        : m.kind === 'audio' && m.fileId ? <AudioMsg chatId={chatId} m={m} mine={mine} />
+                    ) : m.kind === 'image' && m.fileId ? <ImageMsg chatId={ref} m={m} onOpen={setViewer} />
+                      : m.kind === 'file' && m.fileId ? <FileMsg chatId={ref} m={m} />
+                        : m.kind === 'audio' && m.fileId ? <AudioMsg chatId={ref} m={m} mine={mine} />
                           : <Typography sx={{ fontSize: 14.5, lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: m.pending ? cv.muted : '#e4e4e7' }}>
                               {m.text}{m.edited && <Box component="span" sx={{ ml: 0.75, fontSize: 11.5, color: cv.faint }}>(editada)</Box>}
                             </Typography>}
                     {m === lastMine && lastIsMine && (
-                      <SeenLine state={receiptOf(m, chat, friend.uid)} at={chat?.reads?.[friend.uid] ? time(chat.reads[friend.uid]) : undefined} friend={{ name: friend.name, photo: friend.profile?.photo }} />
+                      thread.isGroup ? (() => {
+                        const seen = seenBy(m, chat, otherIds)
+                        const st = receiptOf(m, chat, otherIds)
+                        return <SeenLine state={seen.length ? 'seen' : st} label={seen.length ? (seen.length === otherIds.length ? 'Vista por todos' : `Vista por ${seen.map((u) => memberOf(u).name).slice(0, 3).join(', ')}${seen.length > 3 ? '…' : ''}`) : undefined} friend={memberOf(seen[0] || otherIds[0] || me.uid)} />
+                      })() : (
+                        <SeenLine state={receiptOf(m, chat, friend!.uid)} at={chat?.reads?.[friend!.uid] ? time(chat.reads[friend!.uid]) : undefined} friend={{ name: friend!.name, photo: friend!.profile?.photo }} />
+                      )
                     )}
                   </Box>
                 </Box>
@@ -301,12 +342,12 @@ export default function Conversation({ me, friend, chat, mobile, onBack }: { me:
         })}
         {typing && (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, mt: 1.5 }}>
-            <Avatar name={friend.name} photo={friend.profile?.photo} size={34} />
+            {thread.isGroup ? <GroupAvatar name={typer || thread.title} color={thread.color} size={34} /> : <Avatar name={friend!.name} photo={friend!.profile?.photo} size={34} />}
             <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, px: 1.5, py: 1.25, borderRadius: '16px', bgcolor: cv.surface,
               '@keyframes tyDot': { '0%, 60%, 100%': { transform: 'translateY(0)', opacity: 0.4 }, '30%': { transform: 'translateY(-3px)', opacity: 1 } } }}>
               {[0, 1, 2].map((d) => <Box key={d} sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: '#cfcfd4', animation: `tyDot 1.2s ease-in-out ${d * 0.15}s infinite` }} />)}
             </Box>
-            <Typography sx={{ fontSize: 12, color: cv.faint }}>{friend.name} está a escrever…</Typography>
+            <Typography sx={{ fontSize: 12, color: cv.faint }}>{thread.isGroup ? typer : friend!.name} está a escrever…</Typography>
           </Box>
         )}
       </Box>
@@ -332,8 +373,8 @@ export default function Conversation({ me, friend, chat, mobile, onBack }: { me:
             <IconButton onClick={() => fileInput.current?.click()} disabled={sending} aria-label="Anexar ficheiro" title="Anexar foto ou ficheiro" sx={{ width: 36, height: 36 }}>
               {sending ? <CircularProgress size={17} sx={{ color: cv.muted }} /> : <AttachFileRounded sx={{ fontSize: 20, transform: 'rotate(45deg)' }} />}
             </IconButton>
-            <Box component="textarea" ref={input} rows={1} value={text} maxLength={2000} placeholder={`Mensagem para ${friend.name}`}
-              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => { setText(e.target.value); if (e.target.value.trim()) pingTyping(me.uid, friend.uid) }}
+            <Box component="textarea" ref={input} rows={1} value={text} maxLength={2000} placeholder={thread.isGroup ? `Mensagem para ${thread.title}` : `Mensagem para ${friend!.name}`}
+              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => { setText(e.target.value); if (e.target.value.trim()) pingTyping(ref, me.uid, users) }}
               onKeyDown={(e: React.KeyboardEvent<HTMLTextAreaElement>) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send() } }}
               onPaste={(e: React.ClipboardEvent) => { const f = e.clipboardData.files?.[0]; if (f) { e.preventDefault(); onPickFile(f) } }}
               sx={{ flex: 1, minWidth: 0, resize: 'none', border: 0, outline: 'none', bgcolor: 'transparent', color: cv.text, font: 'inherit', fontSize: 15, lineHeight: 1.45, py: '7px', px: 0.5, maxHeight: 140, '&::placeholder': { color: cv.faint } }} />
@@ -349,7 +390,7 @@ export default function Conversation({ me, friend, chat, mobile, onBack }: { me:
 
       <Dialog open={!!confirmDelete} onClose={() => setConfirmDelete(null)} maxWidth="xs" fullWidth PaperProps={{ sx: { bgcolor: '#1f1f1f', borderRadius: '22px', m: 2, p: 2.5, color: cv.text } }}>
         <Typography sx={{ fontFamily: cv.display, fontSize: 18, fontWeight: 700 }}>Apagar mensagem?</Typography>
-        <Typography sx={{ fontSize: 14, color: cv.muted, mt: 0.75, lineHeight: 1.5 }}>A mensagem é apagada para ti e para {friend.name}. Fica só a indicação "mensagem apagada".</Typography>
+        <Typography sx={{ fontSize: 14, color: cv.muted, mt: 0.75, lineHeight: 1.5 }}>A mensagem é apagada para {thread.isGroup ? 'todos no grupo' : `ti e para ${friend!.name}`}. Fica só a indicação "mensagem apagada".</Typography>
         <Box sx={{ display: 'flex', gap: 1, mt: 2.5 }}>
           <Box component="button" autoFocus onClick={() => setConfirmDelete(null)} sx={{ flex: 1, height: 42, border: 0, borderRadius: 999, bgcolor: '#fff', color: '#0d0d0d', font: 'inherit', fontSize: 14.5, fontWeight: 600, cursor: 'pointer' }}>Cancelar</Box>
           <Box component="button" onClick={doDelete} sx={{ flex: 1, height: 42, border: 0, borderRadius: 999, bgcolor: 'transparent', boxShadow: 'inset 0 0 0 1px rgba(255,159,136,.4)', color: cv.coral, font: 'inherit', fontSize: 14.5, fontWeight: 600, cursor: 'pointer' }}>Apagar</Box>
@@ -374,18 +415,18 @@ const sendBtn = (on: boolean) => ({
   background: on ? cv.send : cv.surface, color: on ? '#fff' : cv.faint, transition: 'background .15s, transform .15s', '&:active:not(:disabled)': { transform: 'scale(.92)' },
 })
 
-function useFile(chatId: string, fileId?: string) {
+function useFile(chatId: ThreadRef, fileId?: string) {
   const [file, setFile] = useState<{ data: string; mime: string; name: string } | null | undefined>(undefined)
   useEffect(() => {
     if (!fileId) { setFile(null); return }
     let alive = true
     loadFile(chatId, fileId).then((f) => { if (alive) setFile(f) })
     return () => { alive = false }
-  }, [chatId, fileId])
+  }, [chatId.id, fileId])  // eslint-disable-line react-hooks/exhaustive-deps
   return file
 }
 
-function ImageMsg({ chatId, m, onOpen }: { chatId: string; m: ChatMessage; onOpen: (src: string) => void }) {
+function ImageMsg({ chatId, m, onOpen }: { chatId: ThreadRef; m: ChatMessage; onOpen: (src: string) => void }) {
   const f = useFile(chatId, m.fileId)
   return (
     <Box sx={{ mt: 0.5, width: 'fit-content', maxWidth: 'min(320px, 100%)', borderRadius: '14px', overflow: 'hidden', bgcolor: cv.surface, boxShadow: `inset 0 0 0 1px ${cv.border}` }}>
@@ -395,7 +436,7 @@ function ImageMsg({ chatId, m, onOpen }: { chatId: string; m: ChatMessage; onOpe
   )
 }
 
-function FileMsg({ chatId, m }: { chatId: string; m: ChatMessage }) {
+function FileMsg({ chatId, m }: { chatId: ThreadRef; m: ChatMessage }) {
   const f = useFile(chatId, m.fileId)
   const ext = (m.name?.split('.').pop() || '').slice(0, 4).toUpperCase()
   return (
@@ -415,7 +456,7 @@ function FileMsg({ chatId, m }: { chatId: string; m: ChatMessage }) {
   )
 }
 
-function AudioMsg({ chatId, m, mine }: { chatId: string; m: ChatMessage; mine: boolean }) {
+function AudioMsg({ chatId, m, mine }: { chatId: ThreadRef; m: ChatMessage; mine: boolean }) {
   const f = useFile(chatId, m.fileId)
   const audio = useRef<HTMLAudioElement | null>(null)
   const [playing, setPlaying] = useState(false)

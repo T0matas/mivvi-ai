@@ -251,7 +251,7 @@ export function FriendsPanel({ friends, incoming, outgoing, onMessage, onAdd, co
             <Avatar name={f.name} photo={f.profile?.photo} online={isOnline(f.profile)} />
             <Box sx={{ flex: 1, minWidth: 0 }}>
               <Typography sx={{ fontSize: 14.5, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.name}</Typography>
-              <Typography sx={{ fontSize: 12, color: cv.muted }}>{isOnline(f.profile) ? 'Online' : f.profile?.year ? yearLabel(f.profile.year) : 'Amigo'}{f.profile?.xp ? ` · ${f.profile.xp} XP` : ''}</Typography>
+              <Typography sx={{ fontSize: 12, color: cv.muted }}>{isOnline(f.profile) ? 'Online' : f.profile?.year ? yearLabel(f.profile.year) : 'Amigo'}</Typography>
             </Box>
             {onMessage && <IconButton onClick={() => { soundManager.playClick(); onMessage(f) }} aria-label={`Mensagem a ${f.name}`} sx={{ width: 34, height: 34 }}><ChatBubbleOutlineRounded sx={{ fontSize: 18 }} /></IconButton>}
             <Box component="button" disabled={busy === f.friendship.id} onClick={() => { if (window.confirm(`Remover ${f.name} dos amigos?`)) act(f.friendship.id, () => removeFriendship(f.friendship.id)) }}

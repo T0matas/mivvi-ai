@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Box, Typography, IconButton, CircularProgress, useMediaQuery } from '@mui/material'
-import { Close, Check, VolumeUp, Replay, ArrowForward, AutoStoriesOutlined, AutoAwesomeRounded } from '@mui/icons-material'
+import { Close, Check, VolumeUp, Replay, ArrowForward, AutoStoriesOutlined } from '@mui/icons-material'
 
 import { Exercise, AIResponse, UserProfile, LessonTheory } from '../types'
 import { generateTheory, generateLessonExercises, getAIFeedback, checkTypedAnswer, normalizeAnswer, LessonRequest } from '../services/aiService'
@@ -265,7 +265,7 @@ export default function Lesson({ lessonId, onComplete, onMistake, onBack, userPr
   const aiButton = !aiOpen && (
     <Box component="button" onClick={() => { soundManager.playClick(); setAiOpen(true) }} aria-label="Pergunta ao Mivvi"
       sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, height: 32, px: 1.25, border: 0, borderRadius: 999, bgcolor: cv.accentSoft, color: '#cfe3ff', font: 'inherit', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap', '&:hover': { bgcolor: 'rgba(96,165,250,.26)' } }}>
-      <AutoAwesomeRounded sx={{ fontSize: 16 }} />{narrow ? 'Mivvi' : 'Pergunta ao Mivvi'}
+      <Mascot size={18} mood="happy" animated={false} />{narrow ? 'Mivvi' : 'Pergunta ao Mivvi'}
     </Box>
   )
 

@@ -1,5 +1,6 @@
 import { Box } from '@mui/material';
-import { HomeRounded, FlagRounded, AutoAwesomeRounded, LocalLibraryRounded, ForumRounded } from '@mui/icons-material';
+import { HomeRounded, LocalLibraryRounded, ForumRounded } from '@mui/icons-material';
+import Mascot from './Mascot';
 import { soundManager } from '../utils/soundEffects';
 import { cv } from '../theme';
 
@@ -14,10 +15,9 @@ interface BottomNavProps {
 // into a white pill with its name; the others stay as quiet icons.
 const ITEMS = [
     { icon: HomeRounded, label: 'Início' },
-    { icon: FlagRounded, label: 'Missões', id: 'tutorial-missions-tab' },
     { icon: LocalLibraryRounded, label: 'Biblioteca' },
     { icon: ForumRounded, label: 'Chat' },
-    { icon: AutoAwesomeRounded, label: 'Mivvi' },
+    { icon: null, label: 'Mivvi' },
 ];
 
 export default function BottomNav({ value, onChange, badges = {} }: BottomNavProps) {
@@ -42,13 +42,12 @@ export default function BottomNav({ value, onChange, badges = {} }: BottomNavPro
                 '@keyframes dockIn': { from: { opacity: 0, transform: 'translate(-50%, 16px)' } },
             }}
         >
-            {ITEMS.map(({ icon: Icon, label, id }, index) => {
+            {ITEMS.map(({ icon: Icon, label }, index) => {
                 const active = value === index;
                 return (
                     <Box
                         key={label}
                         component="button"
-                        id={id}
                         type="button"
                         aria-label={label}
                         aria-current={active ? 'page' : undefined}
@@ -65,7 +64,7 @@ export default function BottomNav({ value, onChange, badges = {} }: BottomNavPro
                             '& .dock-label': { maxWidth: active ? 100 : 0, opacity: active ? 1 : 0, overflow: 'hidden', transition: 'max-width .3s cubic-bezier(.22,1,.36,1), opacity .2s' },
                         }}
                     >
-                        <Icon sx={{ fontSize: 21 }} />
+                        {Icon ? <Icon sx={{ fontSize: 21 }} /> : <Mascot size={22} mood={active ? 'happy' : 'idle'} animated={false} />}
                         <span className="dock-label">{label}</span>
                         {!!badges[index] && (
                             <Box component="span" aria-label={`${badges[index]} novas`} sx={{ position: 'absolute', top: 5, right: active ? 6 : 4, minWidth: 16, height: 16, px: '4px', borderRadius: 999, bgcolor: cv.accent, color: '#0d0d0d', fontSize: 10, fontWeight: 800, display: 'grid', placeItems: 'center', boxShadow: '0 0 0 2px rgba(32,32,32,.95)' }}>

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { onAuthStateChanged, User } from 'firebase/auth'
 import { auth } from '../firebase'
-import { Friendship, PublicProfile, subscribeFriendships, subscribeProfile, subscribeChats, ChatSummary, isUnread, markDelivered } from './social'
+import { Friendship, PublicProfile, subscribeFriendships, subscribeProfile, subscribeChats, subscribeGroups, ChatSummary, GroupInfo, isUnread, markDelivered, groupRef } from './social'
 
 /** The signed-in Firebase user, kept up to date. */
 export function useAuthUser() {
@@ -22,28 +22,31 @@ export function useSocial(uid?: string | null) {
   const [friendships, setFriendships] = useState<Friendship[]>([])
   const [profiles, setProfiles] = useState<Record<string, PublicProfile | null>>({})
   const [chats, setChats] = useState<ChatSummary[]>([])
+  const [groups, setGroups] = useState<GroupInfo[]>([])
   const [error, setError] = useState(false)
   const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {
-    setFriendships([]); setChats([]); setLoaded(false); setError(false)
+    setFriendships([]); setChats([]); setGroups([]); setLoaded(false); setError(false)
     if (!uid) return
     const a = subscribeFriendships(uid, (l) => { setFriendships(l); setLoaded(true); setError(false) }, () => { setError(true); setLoaded(true) })
     const b = subscribeChats(uid, setChats)
-    return () => { a(); b() }
+    const c = subscribeGroups(uid, setGroups)
+    return () => { a(); b(); c() }
   }, [uid])
 
   // New messages reached this device: tell the sender ("Entregue").
   const deliveredFor = useRef<Record<string, number>>({})
   useEffect(() => {
     if (!uid) return
-    for (const c of chats) {
+    const all: [ChatSummary, 'chats' | 'groups'][] = [...chats.map((c) => [c, 'chats'] as [ChatSummary, 'chats']), ...groups.map((g) => [g, 'groups'] as [ChatSummary, 'groups'])]
+    for (const [c, col] of all) {
       if (!c.lastAt || c.lastFrom === uid) continue
-      if ((c.delivered?.[uid] || 0) >= c.lastAt || deliveredFor.current[c.id] === c.lastAt) continue
-      deliveredFor.current[c.id] = c.lastAt
-      markDelivered(c, uid)
+      if ((c.delivered?.[uid] || 0) >= c.lastAt || deliveredFor.current[col + c.id] === c.lastAt) continue
+      deliveredFor.current[col + c.id] = c.lastAt
+      markDelivered(col === 'groups' ? groupRef(c.id) : { col: 'chats', id: c.id }, c, uid)
     }
-  }, [chats, uid])
+  }, [chats, groups, uid])
 
   // Live public cards of everyone in the list (names, online status).
   const others = useMemo(() => [...new Set(friendships.map((f) => f.users.find((u) => u !== uid)!).filter(Boolean))].sort(), [friendships, uid])
@@ -63,7 +66,7 @@ export function useSocial(uid?: string | null) {
   const friends = friendships.filter((f) => f.status === 'accepted').map(view).sort((a, b) => a.name.localeCompare(b.name))
   const incoming = friendships.filter((f) => f.status === 'pending' && f.to === uid).map(view)
   const outgoing = friendships.filter((f) => f.status === 'pending' && f.from === uid).map(view)
-  const unread = uid ? chats.filter((c) => isUnread(c, uid) && friends.some((f) => c.users.includes(f.uid))).length : 0
+  const unread = uid ? chats.filter((c) => isUnread(c, uid) && friends.some((f) => c.users.includes(f.uid))).length + groups.filter((g) => isUnread(g, uid)).length : 0
 
-  return { friends, incoming, outgoing, chats, unread, loaded, error }
+  return { friends, incoming, outgoing, chats, groups, unread, loaded, error }
 }

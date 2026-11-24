@@ -3,7 +3,7 @@ import { signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { auth } from '../firebase';
 import { yearLabel, courseInfo } from '../data/ptCurriculum';
 import { useEffect, useState } from 'react';
-import { LocalFireDepartment, Bolt } from '@mui/icons-material';
+import { LocalFireDepartment } from '@mui/icons-material';
 import { UserProgress, UserProfile } from '../types';
 import { useNavigate } from 'react-router-dom';
 import { soundManager } from '../utils/soundEffects';
@@ -42,7 +42,7 @@ const StatBox = styled('button')(() => ({
 
 export default function TopBar({ userProgress, userProfile, onOpenProfile, onOpenAccount, onHome }: TopBarProps) {
     const navigate = useNavigate();
-    const [info, setInfo] = useState<{ el: HTMLElement; kind: 'xp' | 'streak' } | null>(null);
+    const [info, setInfo] = useState<{ el: HTMLElement; kind: 'streak' } | null>(null);
     const [menu, setMenu] = useState<HTMLElement | null>(null);
     const [confirmOut, setConfirmOut] = useState(false);
     const [account, setAccount] = useState<User | null>(auth.currentUser);
@@ -60,8 +60,6 @@ export default function TopBar({ userProgress, userProfile, onOpenProfile, onOpe
         window.location.href = '/welcome';
     };
     const menuItem = { display: 'block', width: '100%', textAlign: 'left' as const, border: 0, bgcolor: 'transparent', color: cv.text, font: 'inherit', fontSize: 14.5, fontWeight: 500, px: 2, py: 1.25, borderRadius: '12px', cursor: 'pointer', '&:hover': { bgcolor: 'rgba(255,255,255,.06)' } };
-    const level = Math.floor(userProgress.xp / 100) + 1;
-    const levelPct = userProgress.xp % 100;
 
     return (
         <AppBar
@@ -89,13 +87,6 @@ export default function TopBar({ userProgress, userProfile, onOpenProfile, onOpe
                 {/* Stats (Right) */}
                 <Box id="tutorial-stats" sx={{ display: 'flex', gap: { xs: 0.5, sm: 2 } }}>
                     
-
-                    <StatBox id="tutorial-xp" aria-label="XP" onClick={(e) => { soundManager.playClick(); setInfo({ el: e.currentTarget, kind: 'xp' }); }} sx={{ color: cv.accent, padding: { xs: '2px 6px', sm: '6px 12px' }, gap: { xs: '4px', sm: '6px' } }}>
-                        <Bolt sx={{ fontSize: { xs: 16, sm: 18 } }} />
-                        <Typography variant="subtitle1" fontWeight={500} sx={{ fontSize: { xs: '0.8rem', sm: '0.9rem' }, color: cv.text, fontVariantNumeric: 'tabular-nums' }}>
-                            {userProgress.xp}
-                        </Typography>
-                    </StatBox>
 
                     <StatBox id="tutorial-streak" aria-label="Lições perfeitas seguidas" onClick={(e) => { soundManager.playClick(); setInfo({ el: e.currentTarget, kind: 'streak' }); }} sx={{
                         color: cv.butter,
@@ -150,21 +141,10 @@ export default function TopBar({ userProgress, userProfile, onOpenProfile, onOpe
 
                 <Popover open={!!info} anchorEl={info?.el} onClose={() => setInfo(null)} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }} transformOrigin={{ vertical: 'top', horizontal: 'center' }}
                     PaperProps={{ sx: { mt: 1, p: 2, width: 240, bgcolor: '#222', borderRadius: '18px', color: cv.text, textAlign: 'left' } }}>
-                    {info?.kind === 'xp' ? (
-                        <>
-                            <Typography sx={{ fontSize: 15, fontWeight: 700 }}>Nível {level}</Typography>
-                            <Box sx={{ height: 5, borderRadius: 999, bgcolor: 'rgba(255,255,255,.1)', overflow: 'hidden', mt: 1.25 }}>
-                                <Box sx={{ width: `${levelPct}%`, height: '100%', bgcolor: cv.accent, borderRadius: 999 }} />
-                            </Box>
-                            <Typography sx={{ fontSize: 13, color: cv.muted, mt: 1 }}>{userProgress.xp} XP no total · faltam {100 - levelPct} XP para o nível {level + 1}.</Typography>
-                            <Typography sx={{ fontSize: 13, color: cv.muted, mt: 0.75 }}>Ganhas XP ao terminar lições e missões.</Typography>
-                        </>
-                    ) : (
                         <>
                             <Typography sx={{ fontSize: 15, fontWeight: 700 }}>{userProgress.streak} {userProgress.streak === 1 ? 'lição perfeita' : 'lições perfeitas'} seguidas</Typography>
                             <Typography sx={{ fontSize: 13, color: cv.muted, mt: 0.75 }}>A sequência cresce cada vez que acabas uma lição sem erros, e volta a zero quando falhas.</Typography>
                         </>
-                    )}
                 </Popover>
             </Toolbar>
             

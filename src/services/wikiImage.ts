@@ -12,23 +12,22 @@ export interface WikiImage {
   page: string
 }
 
-const CACHE = 'mivvi_wikiimg_v1'
+const CACHE = 'mivvi_wikiimg_v2'
 const memory = new Map<string, Promise<WikiImage | null>>()
 
 function readCache(): Record<string, WikiImage | null> {
   try { return JSON.parse(localStorage.getItem(CACHE) || '{}') } catch { return {} }
 }
 
-async function search(lang: string, query: string): Promise<WikiImage | null> {
-  const url = `https://${lang}.wikipedia.org/w/api.php?action=query&format=json&origin=*&generator=search&gsrsearch=${encodeURIComponent(query)}&gsrlimit=3&prop=pageimages|info&inprop=url&piprop=thumbnail&pithumbsize=900`
+/** The main picture of the article with exactly this title (redirects followed). No free-text search: it found unrelated pictures. */
+async function byTitle(lang: string, title: string): Promise<WikiImage | null> {
+  const url = `https://${lang}.wikipedia.org/w/api.php?action=query&format=json&origin=*&redirects=1&titles=${encodeURIComponent(title)}&prop=pageimages|info&inprop=url&piprop=thumbnail&pithumbsize=900&pilicense=free`
   const res = await fetch(url)
   if (!res.ok) return null
   const data = await res.json()
-  const pages = Object.values(data?.query?.pages || {}) as any[]
-  pages.sort((a, b) => (a.index || 0) - (b.index || 0))
-  const hit = pages.find((p) => p.thumbnail?.source && p.thumbnail.width >= 200)
-  if (!hit) return null
-  return { src: hit.thumbnail.source, width: hit.thumbnail.width, height: hit.thumbnail.height, title: hit.title, page: hit.fullurl || `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(hit.title)}` }
+  const page = (Object.values(data?.query?.pages || {}) as any[]).find((p) => !('missing' in p) && p.thumbnail?.source && p.thumbnail.width >= 200)
+  if (!page) return null
+  return { src: page.thumbnail.source, width: page.thumbnail.width, height: page.thumbnail.height, title: page.title, page: page.fullurl || `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(page.title)}` }
 }
 
 export function findWikiImage(query: string): Promise<WikiImage | null> {
@@ -39,7 +38,7 @@ export function findWikiImage(query: string): Promise<WikiImage | null> {
   if (memory.has(key)) return memory.get(key)!
   const job = (async () => {
     try {
-      const img = (await search('pt', query)) || (await search('en', query))
+      const img = (await byTitle('pt', query)) || (await byTitle('en', query))
       const all = readCache()
       all[key] = img
       const keys = Object.keys(all)

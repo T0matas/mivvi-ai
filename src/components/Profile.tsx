@@ -1,5 +1,5 @@
 import { Box, Typography, Dialog, DialogContent, TextField, DialogActions, Button } from '@mui/material'
-import { EditOutlined, LocalFireDepartmentRounded, StarRounded, BoltRounded, SchoolRounded, PersonAddAlt1Outlined, TuneRounded, QrCode2Rounded } from '@mui/icons-material'
+import { EditOutlined, LocalFireDepartmentRounded, SchoolRounded, PersonAddAlt1Outlined, TuneRounded, QrCode2Rounded } from '@mui/icons-material'
 import { SubjectTile } from './SubjectDoodle'
 import { subjectName, yearLabel as ptYearLabel, courseInfo } from '../data/ptCurriculum'
 import SubjectPicker from './SubjectPicker'
@@ -48,8 +48,6 @@ export default function Profile({ userProfile, userProgress, onUpdateProfile, me
     // Stats Data
     const stats = [
         { label: t('streak', lang), value: userProgress.streak, icon: <LocalFireDepartmentRounded />, color: '#ff9f88' },
-        { label: t('total_xp', lang), value: userProgress.xp, icon: <StarRounded />, color: cv.butter },
-        { label: t('daily_xp', lang), value: userProgress.dailyXP || 0, icon: <BoltRounded />, color: '#9fc9ff' },
         { label: t('lessons', lang), value: userProgress.completedLessons.length, icon: <SchoolRounded />, color: cv.mint },
     ]
 
@@ -93,8 +91,6 @@ export default function Profile({ userProfile, userProgress, onUpdateProfile, me
     const [pickerOpen, setPickerOpen] = useState(false)
     const [allSubjects, setAllSubjects] = useState(false)
     const SUBJECTS_SHOWN = 6
-    const level = Math.floor(userProgress.xp / 100) + 1
-    const levelPct = userProgress.xp % 100
     const pt = lang.startsWith('pt')
     const heading = { fontSize: 15, fontWeight: 600 }
     const card = { bgcolor: cv.paper, borderRadius: '24px', boxShadow: `inset 0 0 0 1px ${cv.border}` }
@@ -127,17 +123,10 @@ export default function Profile({ userProfile, userProgress, onUpdateProfile, me
                         <SchoolRounded sx={{ fontSize: 16 }} />Mudar ano
                     </Box>
                 </Box>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mt: 2 }}>
-                    <Typography sx={{ fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap' }}>Nível {level}</Typography>
-                    <Box sx={{ flex: 1, height: 6, borderRadius: 999, bgcolor: 'rgba(255,255,255,.08)', overflow: 'hidden' }}>
-                        <Box sx={{ height: '100%', width: `${levelPct}%`, minWidth: levelPct ? 6 : 0, bgcolor: cv.accent, borderRadius: 999, transition: 'width .8s cubic-bezier(.22,1,.36,1)' }} />
-                    </Box>
-                    <Typography sx={{ fontSize: 12.5, color: cv.muted, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{100 - levelPct} XP para o nível {level + 1}</Typography>
-                </Box>
             </Box>
 
             {/* Stats */}
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(4, 1fr)' }, gap: 1.25, mt: 1.25 }}>
+            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1.25, mt: 1.25 }}>
                 {stats.map((st, i) => (
                     <Box key={st.label} sx={{ ...card, borderRadius: '20px', p: 2, ...rise(0.05 + i * 0.04) }}>
                         <Box sx={{ width: 36, height: 36, borderRadius: '11px', bgcolor: st.color, color: '#1d2742', display: 'grid', placeItems: 'center', '& svg': { fontSize: 20 } }}>{st.icon}</Box>

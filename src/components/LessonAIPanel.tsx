@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Box, Typography, IconButton } from '@mui/material'
-import { ArrowUpward, Close, EditNoteRounded, StopRounded, AutoAwesomeRounded, ContentCopyRounded, CheckRounded, RefreshRounded } from '@mui/icons-material'
+import { ArrowUpward, Close, EditNoteRounded, StopRounded, ContentCopyRounded, CheckRounded, RefreshRounded } from '@mui/icons-material'
 import Mascot from './Mascot'
 import { Markdown } from './AITutor'
 import { chatWithKodu, TutorContext } from '../services/aiService'
@@ -99,7 +99,7 @@ export default function LessonAIPanel({ open, onClose, mobile, context, contextL
         }}>
         {/* Header */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.75, height: 54, flexShrink: 0, borderBottom: `1px solid ${cv.border}` }}>
-          <AutoAwesomeRounded sx={{ fontSize: 17, color: cv.accent }} />
+          <Mascot size={22} mood="happy" animated={false} />
           <Typography sx={{ flex: 1, fontSize: 15, fontWeight: 650 }}>Pergunta ao Mivvi</Typography>
           <IconButton onClick={() => { abort.current?.abort(); setMessages([]); soundManager.playClick() }} aria-label="Nova conversa" title="Nova conversa" sx={{ width: 32, height: 32 }}><EditNoteRounded sx={{ fontSize: 19 }} /></IconButton>
           <IconButton onClick={() => { soundManager.playBack(); onClose() }} aria-label="Fechar" sx={{ width: 32, height: 32 }}><Close sx={{ fontSize: 18 }} /></IconButton>

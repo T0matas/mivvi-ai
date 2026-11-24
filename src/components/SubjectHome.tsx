@@ -24,7 +24,6 @@ interface SubjectHomeProps {
     onAddSubject: () => void
 }
 
-const DAILY_GOAL = 50
 const VISIBLE = 6
 const RECENT_KEY = 'mivvi_recentSubjects'
 
@@ -36,21 +35,6 @@ const greeting = () => {
     return h < 12 ? 'Bom dia' : h < 20 ? 'Boa tarde' : 'Boa noite'
 }
 
-function Ring({ value, color, size = 44, stroke = 4, children }: { value: number; color: string; size?: number; stroke?: number; children?: React.ReactNode }) {
-    const r = (size - stroke) / 2
-    const c = 2 * Math.PI * r
-    return (
-        <Box sx={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
-            <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
-                <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(255,255,255,.08)" strokeWidth={stroke} />
-                <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={stroke} strokeLinecap="round"
-                    strokeDasharray={c} strokeDashoffset={c * (1 - Math.min(1, value))}
-                    style={{ transition: 'stroke-dashoffset .8s cubic-bezier(.22,1,.36,1)' }} />
-            </svg>
-            <Box sx={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center' }}>{children}</Box>
-        </Box>
-    )
-}
 
 const shimmerText = {
     color: 'transparent', backgroundImage: 'linear-gradient(90deg, #8e8e93 0%, #8e8e93 40%, #f2f2f7 50%, #8e8e93 60%, #8e8e93 100%)', backgroundSize: '300% 100%',
@@ -80,12 +64,11 @@ export default function SubjectHome({ userProfile, userProgress, currentSubject,
     const heroLessons = focus && year ? getLessonsBySubject(focus, year, lang, plan) : []
     const done = heroLessons.filter((l) => userProgress.completedLessons.includes(l.id)).length
     const next = heroLessons.find((l) => !userProgress.completedLessons.includes(l.id))
-    const locked = Boolean(next && (next.requiredXp || 0) > userProgress.xp)
+    const locked = false
     const upcoming = next ? heroLessons.slice(next.lessonNumber, next.lessonNumber + 2) : []
     const color = focus ? subjectColor(focus) : cv.accent
     const planning = !plan && loading
 
-    const today = userProgress.lastXPDate === new Date().toDateString() ? (userProgress.dailyXP || 0) : 0
 
     // Recent first, then the profile order.
     const ordered = useMemo(() => {
@@ -112,14 +95,10 @@ export default function SubjectHome({ userProfile, userProgress, currentSubject,
                         {greeting()}{userProfile.name ? `, ${userProfile.name}` : ''}
                     </Typography>
                     <Typography sx={{ color: cv.muted, fontSize: 14 }}>
-                        {today >= DAILY_GOAL ? 'Objetivo de hoje cumprido!' : 'Bora aprender um bocadinho hoje?'}
+                        Bora aprender um bocadinho hoje?
                     </Typography>
                 </Box>
                 <Box sx={{ display: 'flex', gap: 0.75 }}>
-                    <Box title="Objetivo de hoje" sx={chipSx}>
-                        <Ring value={today / DAILY_GOAL} color={today >= DAILY_GOAL ? cv.green : cv.accent} size={18} stroke={3} />
-                        {Math.min(today, DAILY_GOAL)}/{DAILY_GOAL} XP
-                    </Box>
                     <Box title="Lições seguidas sem erros" sx={{ ...chipSx, color: userProgress.streak ? cv.butter : cv.muted }}>
                         <LocalFireDepartment sx={{ fontSize: 17 }} />{userProgress.streak}
                     </Box>

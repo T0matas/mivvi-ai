@@ -1,5 +1,5 @@
 import { Fragment, ReactNode, useEffect, useRef, useState } from 'react'
-import { Box, Typography, IconButton, Popover, CircularProgress } from '@mui/material'
+import { Box, Typography, IconButton, Popover, CircularProgress, useMediaQuery } from '@mui/material'
 import { Close, ArrowForward, FormatListBulletedRounded, AutoStoriesRounded } from '@mui/icons-material'
 import { LessonTheory } from '../types'
 import Mascot from './Mascot'
@@ -71,6 +71,24 @@ export default function LessonTheoryView({ theory, subject, lessonNumber, ready,
 
   const label = { fontSize: 11.5, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase' as const }
 
+  // Outline on the left (wide screens), like a table of contents.
+  const wide = useMediaQuery(`(min-width: ${1080 + rightInset}px)`)
+  const [active, setActive] = useState('th-0')
+  const outline = [
+    ...theory.sections.map((x, i) => ({ id: `th-${i}`, label: x.heading })),
+    ...(theory.keyPoints.length ? [{ id: 'th-keep', label: 'Para guardar' }] : []),
+  ]
+  useEffect(() => {
+    const root = scroller.current
+    if (!root || !wide) return
+    const io = new IntersectionObserver((entries) => {
+      const hit = entries.filter((e) => e.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0]
+      if (hit) setActive(hit.target.id)
+    }, { root, rootMargin: '-15% 0px -70% 0px' })
+    root.querySelectorAll('[data-outline]').forEach((el) => io.observe(el))
+    return () => io.disconnect()
+  }, [wide, outline.length])
+
   return (
     <Box sx={{ position: 'fixed', top: 0, left: 0, bottom: 0, right: `${rightInset}px`, transition: 'right .3s cubic-bezier(.22,1,.36,1)', zIndex: 1300, bgcolor: cv.bg, color: cv.text, display: 'flex', flexDirection: 'column', textAlign: 'left',
       '@keyframes thIn': { from: { opacity: 0, transform: 'translateY(10px)' } } }}>
@@ -107,7 +125,24 @@ export default function LessonTheoryView({ theory, subject, lessonNumber, ready,
 
       {/* Article */}
       <Box ref={scroller} sx={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
-        <Box component="article" sx={{ maxWidth: 680, mx: 'auto', px: { xs: 2, sm: 3 }, pt: { xs: 2.5, sm: 4 }, pb: mode === 'lesson' ? '130px' : 6, boxSizing: 'border-box' }}>
+        <Box sx={{ display: wide ? 'grid' : 'block', gridTemplateColumns: '200px minmax(0, 680px)', justifyContent: 'center', columnGap: 6, px: { sm: 3 } }}>
+        {wide && (
+          <Box component="nav" aria-label="Nesta aula" sx={{ position: 'sticky', top: 0, alignSelf: 'start', pt: 4.5 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 1.25, color: cv.faint }}>
+              <FormatListBulletedRounded sx={{ fontSize: 15 }} />
+              <Typography sx={{ ...label, color: cv.faint }}>Nesta aula</Typography>
+            </Box>
+            {outline.map((o, i) => (
+              <Box key={o.id} component="button" onClick={() => goTo(o.id)}
+                sx={{ display: 'flex', gap: 1.25, width: '100%', p: '7px 10px', border: 0, borderRadius: '10px', textAlign: 'left', font: 'inherit', cursor: 'pointer',
+                  bgcolor: active === o.id ? cv.surface : 'transparent', color: active === o.id ? cv.text : cv.muted, '&:hover': { color: cv.text } }}>
+                <Box component="span" sx={{ fontSize: 11.5, fontWeight: 600, color: cv.faint, fontVariantNumeric: 'tabular-nums', pt: '2px' }}>{String(i + 1).padStart(2, '0')}</Box>
+                <Box component="span" sx={{ fontSize: 13.5, fontWeight: 600, lineHeight: 1.35 }}>{o.label}</Box>
+              </Box>
+            ))}
+          </Box>
+        )}
+        <Box component="article" sx={{ maxWidth: 680, width: '100%', mx: 'auto', px: { xs: 2, sm: wide ? 0 : 3 }, pt: { xs: 2.5, sm: 4 }, pb: mode === 'lesson' ? '130px' : 8, boxSizing: 'border-box' }}>
           {/* Header */}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, animation: 'thIn .4s ease both' }}>
             <SubjectTile subject={subject} size={30} />
@@ -143,7 +178,7 @@ export default function LessonTheoryView({ theory, subject, lessonNumber, ready,
 
           {/* Sections */}
           {theory.sections.map((s, i) => (
-            <Box key={i} id={`th-${i}`} component="section" sx={{ mt: 3, pt: 3, borderTop: `1px solid ${cv.border}`, scrollMarginTop: 16, animation: `thIn .45s ease ${0.1 + i * 0.05}s both` }}>
+            <Box key={i} id={`th-${i}`} data-outline component="section" sx={{ mt: 3, pt: 3, borderTop: `1px solid ${cv.border}`, scrollMarginTop: 16, animation: `thIn .45s ease ${0.1 + i * 0.05}s both` }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <Box component="span" sx={{ minWidth: 26, height: 22, px: 0.75, borderRadius: '7px', boxShadow: `inset 0 0 0 1px ${cv.borderStrong}`, fontSize: 11.5, fontWeight: 700, color: cv.muted, display: 'grid', placeItems: 'center', fontVariantNumeric: 'tabular-nums' }}>
                   {String(i + 1).padStart(2, '0')}
@@ -168,7 +203,7 @@ export default function LessonTheoryView({ theory, subject, lessonNumber, ready,
 
           {/* To remember */}
           {theory.keyPoints.length > 0 && (
-            <Box id="th-keep" sx={{ mt: 4, scrollMarginTop: 16 }}>
+            <Box id="th-keep" data-outline sx={{ mt: 4, scrollMarginTop: 16 }}>
               <Typography sx={{ ...label, fontSize: 12.5, color: cv.text, pb: 1.25, borderBottom: `1px solid ${cv.border}` }}>Para guardar</Typography>
               {theory.keyPoints.map((k, i) => (
                 <Box key={i} sx={{ display: 'flex', alignItems: 'baseline', gap: 1.75, py: 1.25, borderBottom: `1px solid ${cv.border}` }}>
@@ -189,6 +224,8 @@ export default function LessonTheoryView({ theory, subject, lessonNumber, ready,
               </Box>
             </Box>
           )}
+
+        </Box>
         </Box>
       </Box>
 
