@@ -13,7 +13,10 @@ export interface UserProfile {
   name?: string
   uid?: string
   lastNameChangeDate?: string
-  friends?: string[] // List of friend UIDs or Names
+  /** Old local-only friend list (before friend requests existed). */
+  friends?: string[]
+  /** The unique id behind the name (see services/social toHandle), once claimed by an account. */
+  handle?: string
 }
 
 export interface UserProgress {
@@ -54,6 +57,8 @@ export interface Exercise {
   audioText?: string // Text to be spoken for listening exercises
   type?: 'typing' | 'multiple-choice' | 'speaking' // UI interaction type
   hint?: string // Optional hint for the exercise
+  /** Other answers that also count as right in typing exercises (synonyms, other spellings). */
+  acceptedAnswers?: string[]
   /** Something to look at with the question (from the AI). */
   visual?: ExerciseVisual
 }
@@ -102,3 +107,45 @@ export type ExerciseVisual =
   | { kind: 'table'; headers: string[]; rows: string[][] }
   | { kind: 'bars'; title?: string; items: { label: string; value: number }[] }
   | { kind: 'list'; title?: string; items: string[] }
+
+
+/** The "aula" part of a lesson: what a teacher would explain before the exercises. */
+export interface LessonTheory {
+  title: string
+  intro: string
+  goals?: string[]
+  sections: TheorySection[]
+  keyPoints: string[]
+  think?: string
+}
+
+/** A lesson summary kept in the Library after the lesson is done. */
+export interface LibraryItem {
+  id: string
+  subject: Subject
+  lessonId: number
+  lessonNumber?: number
+  title: string
+  theory: LessonTheory
+  correct: number
+  total: number
+  date: number
+}
+
+export interface TheoryDiagram {
+  kind: 'steps' | 'compare' | 'layers' | 'cycle'
+  title?: string
+  items: { label: string; text?: string }[]
+}
+
+export interface TheorySection {
+  heading: string
+  body: string
+  points?: string[]
+  terms?: { term: string; meaning: string }[]
+  diagram?: TheoryDiagram
+  /** A Wikipedia article whose main picture illustrates the section. */
+  image?: string
+  example?: string
+  minutes?: number
+}

@@ -85,7 +85,7 @@ function inline(text: string, animate: boolean): ReactNode[] {
         return <Fragment key={i}>{words(part, animate, `t${i}`)}</Fragment>
     })
 }
-function Markdown({ text, animate }: { text: string; animate: boolean }) {
+export function Markdown({ text, animate }: { text: string; animate: boolean }) {
     const blocks = text.split(/(```[\s\S]*?(?:```|$))/g).filter((b) => b.trim())
     return (
         <>

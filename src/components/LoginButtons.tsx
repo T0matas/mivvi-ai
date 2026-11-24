@@ -1,61 +1,52 @@
 import { Box, Typography, CircularProgress } from '@mui/material';
 import { cv } from '../theme';
-import { signInWithPopup, signInWithRedirect, getRedirectResult } from 'firebase/auth';
+import { signInWithPopup, signInWithRedirect, getRedirectResult, User } from 'firebase/auth';
 import { auth, googleProvider } from '../firebase';
-import { useState, useEffect } from 'react';
-import useIsMobile from '../hooks/useIsMobile';
+import { useState, useEffect, useRef } from 'react';
 
 interface LoginButtonsProps {
-  onSuccess: (credentialResponse: any) => void;
+  onSuccess: (credentialResponse: { user: User }) => void;
   onError: () => void;
   language?: string;
 }
 
+// Google sign-in. A popup is used on every device: the redirect flow loses the
+// session on phones (Safari/Chrome block the storage the firebaseapp.com page
+// needs when the app runs on another domain), which is why the account was
+// "not saved". The redirect is only a fallback when the popup is blocked.
+
+let redirectChecked = false;
+
 export default function LoginButtons({ onSuccess, onError }: LoginButtonsProps) {
   const [loading, setLoading] = useState(false);
-  const isMobile = useIsMobile();
+  const [error, setError] = useState('');
+  const cb = useRef({ onSuccess, onError });
+  cb.current = { onSuccess, onError };
 
-  // Handle Redirect Result (for Mobile)
+  // Coming back from the redirect fallback.
   useEffect(() => {
-    const checkRedirect = async () => {
-      try {
-        const result = await getRedirectResult(auth);
-        if (result) {
-          const user = result.user;
-          onSuccess({ user });
-        }
-      } catch (error) {
-        console.error("Redirect Login Error:", error);
-        onError();
-      }
-    };
-    checkRedirect();
-  }, [onSuccess, onError]);
+    if (redirectChecked) return;
+    redirectChecked = true;
+    getRedirectResult(auth)
+      .then((result) => { if (result?.user) cb.current.onSuccess({ user: result.user }); })
+      .catch((e) => { console.error('Redirect login error:', e); });
+  }, []);
 
   const signInWithGoogle = async () => {
+    setError('');
+    setLoading(true);
     try {
-      setLoading(true);
-      // Force account selection prompt
-      googleProvider.setCustomParameters({ prompt: 'select_account' });
-
-      if (isMobile) {
-        // Use Redirect for Mobile (avoids popup blockers)
-        await signInWithRedirect(auth, googleProvider);
-        // Page will reload, execution stops here
-      } else {
-        // Use Popup for Desktop
-        const result = await signInWithPopup(auth, googleProvider);
-        const user = result.user;
-        onSuccess({ user });
+      const result = await signInWithPopup(auth, googleProvider);
+      onSuccess({ user: result.user });
+      setLoading(false);
+    } catch (e: any) {
+      const code = e?.code || '';
+      if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') { setLoading(false); return; }
+      if (code === 'auth/popup-blocked' || code === 'auth/operation-not-supported-in-this-environment') {
+        try { await signInWithRedirect(auth, googleProvider); return; } catch (e2) { console.error(e2); }
       }
-    } catch (error: any) {
-      // Ignore popup closed by user error
-      if (error.code === 'auth/popup-closed-by-user') {
-        console.log('User closed the popup');
-        setLoading(false);
-        return;
-      }
-      console.error("Google Sign-in Error:", error);
+      console.error('Google sign-in error:', e);
+      setError(code === 'auth/network-request-failed' ? 'Sem ligação à internet. Tenta outra vez.' : 'Não foi possível entrar. Tenta outra vez.');
       onError();
       setLoading(false);
     }
@@ -76,6 +67,7 @@ export default function LoginButtons({ onSuccess, onError }: LoginButtonsProps) 
         )}
         {loading ? 'A entrar…' : 'Continuar com Google'}
       </Box>
+      {error && <Typography sx={{ fontSize: 13, color: cv.coral, textAlign: 'center' }}>{error}</Typography>}
       <Typography sx={{ mt: 1.5, fontSize: 12, color: cv.faint, textAlign: 'center', lineHeight: 1.5 }}>
         Ao continuar, aceitas os Termos de Serviço e a Política de Privacidade do Mivvi.
       </Typography>

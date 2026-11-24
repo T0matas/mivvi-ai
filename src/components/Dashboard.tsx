@@ -1,5 +1,5 @@
-import { Box } from '@mui/material'
-import { useState, useEffect } from 'react'
+import { Box, Typography } from '@mui/material'
+import { useState, useEffect, useRef } from 'react'
 import { UserProgress, UserProfile, Subject } from '../types'
 import TopBar from './TopBar'
 import BottomNav from './BottomNav'
@@ -10,7 +10,19 @@ import AccountPrivacy from './AccountPrivacy'
 import Missions from './Missions'
 import Profile from './Profile'
 import AITutor from './AITutor'
+import Library from './Library'
+import Chat from './Chat'
+import { AddFriendDialog } from './Friends'
+import SocialSetup from './SocialSetup'
+import CallProvider from './CallProvider'
+import Mascot from './Mascot'
+import { useAuthUser, useSocial, FriendView } from '../services/useSocial'
+import { PublicProfile } from '../services/social'
+import { soundManager } from '../utils/soundEffects'
 import { cv } from '../theme'
+
+// Tabs: 0 Início · 1 Missões · 2 Biblioteca · 3 Chat · 4 Mivvi · 5 Perfil · 6 Conta
+const TAB = { home: 0, missions: 1, library: 2, chat: 3, tutor: 4, profile: 5, account: 6 } as const
 
 interface DashboardProps {
   // ...
@@ -41,6 +53,35 @@ export default function Dashboard({ userProgress, userProfile, onStartLesson, on
   // Use userProfile.language for translations
   const lang = userProfile.language || 'pt-BR';
 
+  // ── Friends and chat ──
+  const user = useAuthUser()
+  const me: PublicProfile | null = user && userProfile.handle && userProfile.name
+    ? { uid: user.uid, name: userProfile.name, handle: userProfile.handle, photo: user.photoURL, year: userProfile.schoolYear }
+    : null
+  const social = useSocial(me?.uid)
+  const [addOpen, setAddOpen] = useState(false)
+  const [addName, setAddName] = useState<string | undefined>()
+  const [chatWith, setChatWith] = useState<string | null>(null)
+
+  // Opened from a friend's QR code / link (/add/<name>).
+  useEffect(() => {
+    const pending = localStorage.getItem('mivvi_pendingAdd')
+    if (!pending) return
+    if (me) { localStorage.removeItem('mivvi_pendingAdd'); setAddName(pending); setAddOpen(true) }
+    else setActiveTab(TAB.profile)
+  }, [me?.uid])  // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Gentle sounds for new requests and messages.
+  const counts = useRef({ incoming: 0, unread: 0 })
+  useEffect(() => {
+    if (social.incoming.length > counts.current.incoming) soundManager.playNotify()
+    if (social.unread > counts.current.unread && activeTab !== TAB.chat) soundManager.playMessage()
+    counts.current = { incoming: social.incoming.length, unread: social.unread }
+  }, [social.incoming.length, social.unread])  // eslint-disable-line react-hooks/exhaustive-deps
+
+  const openChat = (f: FriendView) => { setChatWith(f.uid); setActiveTab(TAB.chat) }
+  const openAdd = () => { setAddName(undefined); setAddOpen(true) }
+
   // Save selected subject to localStorage whenever it changes
   useEffect(() => {
     if (selectedSubject) {
@@ -64,6 +105,7 @@ export default function Dashboard({ userProgress, userProfile, onStartLesson, on
   // ... existing code ...
 
   return (
+    <CallProvider me={me} friends={social.friends}>
     <Box sx={{ minHeight: '100dvh', bgcolor: cv.bg, pb: '96px' }}>
       <TopBar
         userProgress={userProgress}
@@ -72,8 +114,8 @@ export default function Dashboard({ userProgress, userProfile, onStartLesson, on
         onPurchaseOutfit={onPurchaseOutfit}
         onEquipOutfit={onEquipOutfit}
         currentOutfit={userProgress.currentOutfit}
-        onOpenProfile={() => setActiveTab(3)}
-        onOpenAccount={() => setActiveTab(4)}
+        onOpenProfile={() => setActiveTab(TAB.profile)}
+        onOpenAccount={() => setActiveTab(TAB.account)}
         onHome={() => setActiveTab(0)}
       />
 
@@ -116,7 +158,22 @@ export default function Dashboard({ userProgress, userProfile, onStartLesson, on
         />
       )}
 
-      {activeTab === 2 && (
+      {activeTab === TAB.library && <Library userProfile={userProfile} />}
+
+      {activeTab === TAB.chat && (me ? (
+        <Chat me={me} friends={social.friends} incomingCount={social.incoming.length} chats={social.chats} openWith={chatWith}
+          onAddFriend={openAdd} onOpenRequests={() => setActiveTab(TAB.profile)} />
+      ) : (
+        <Box sx={{ maxWidth: 440, mx: 'auto', px: 2.5, pt: 6, display: 'grid', justifyItems: 'center', textAlign: 'center', color: cv.text }}>
+          <Mascot size={80} mood="happy" />
+          <Typography sx={{ fontFamily: cv.display, fontSize: 22, fontWeight: 700, mt: 2 }}>Fala com os teus amigos</Typography>
+          <Box sx={{ width: '100%', mt: 3, p: 2.25, borderRadius: '22px', bgcolor: cv.paper, boxShadow: `inset 0 0 0 1px ${cv.border}`, textAlign: 'left' }}>
+            <SocialSetup user={user} userProfile={userProfile} xp={userProgress.xp} onUpdateProfile={onUpdateProfile} />
+          </Box>
+        </Box>
+      ))}
+
+      {activeTab === TAB.tutor && (
         <AITutor
           embedded
           userProfile={userProfile}
@@ -125,15 +182,19 @@ export default function Dashboard({ userProgress, userProfile, onStartLesson, on
         />
       )}
 
-      {activeTab === 4 && (
+      {activeTab === TAB.account && (
         <AccountPrivacy userProfile={userProfile} userProgress={userProgress} onUpdateProfile={onUpdateProfile} />
       )}
 
-      {activeTab === 3 && (
+      {activeTab === TAB.profile && (
         <Profile
           userProfile={userProfile}
           userProgress={userProgress}
           onUpdateProfile={onUpdateProfile}
+          me={me}
+          social={social}
+          onAddFriend={openAdd}
+          onMessage={openChat}
         />
       )}
 
@@ -153,7 +214,10 @@ export default function Dashboard({ userProgress, userProfile, onStartLesson, on
         }}
       />
 
-      <BottomNav value={activeTab} onChange={setActiveTab} />
+      {me && <AddFriendDialog open={addOpen} onClose={() => setAddOpen(false)} me={me} initialName={addName} />}
+
+      <BottomNav value={activeTab} onChange={(v) => { if (v !== TAB.chat) setChatWith(null); setActiveTab(v) }} badges={{ [TAB.chat]: social.unread + social.incoming.length }} />
     </Box>
+    </CallProvider>
   )
 }

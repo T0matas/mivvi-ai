@@ -2,7 +2,7 @@
 // (/api/ai/chat), which holds the Groq key and the system prompts; the browser
 // only sends the conversation, a small context and the mode.
 
-export type KoduMode = 'tutor' | 'feedback' | 'exercises' | 'plan'
+export type KoduMode = 'tutor' | 'feedback' | 'exercises' | 'plan' | 'lesson' | 'grade'
 
 export interface KoduMessage {
   role: 'user' | 'assistant'

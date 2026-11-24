@@ -1,11 +1,13 @@
 import { Box } from '@mui/material';
-import { HomeRounded, FlagRounded, ChatBubbleRounded } from '@mui/icons-material';
+import { HomeRounded, FlagRounded, AutoAwesomeRounded, LocalLibraryRounded, ForumRounded } from '@mui/icons-material';
 import { soundManager } from '../utils/soundEffects';
 import { cv } from '../theme';
 
 interface BottomNavProps {
     value: number;
     onChange: (newValue: number) => void;
+    /** Small counters on the icons (e.g. unread messages), by tab index. */
+    badges?: Record<number, number>;
 }
 
 // Mivvi's dock: a small floating bar at the bottom. The active section grows
@@ -13,10 +15,12 @@ interface BottomNavProps {
 const ITEMS = [
     { icon: HomeRounded, label: 'Início' },
     { icon: FlagRounded, label: 'Missões', id: 'tutorial-missions-tab' },
-    { icon: ChatBubbleRounded, label: 'Mivvi' },
+    { icon: LocalLibraryRounded, label: 'Biblioteca' },
+    { icon: ForumRounded, label: 'Chat' },
+    { icon: AutoAwesomeRounded, label: 'Mivvi' },
 ];
 
-export default function BottomNav({ value, onChange }: BottomNavProps) {
+export default function BottomNav({ value, onChange, badges = {} }: BottomNavProps) {
     return (
         <Box
             component="nav"
@@ -50,18 +54,24 @@ export default function BottomNav({ value, onChange }: BottomNavProps) {
                         aria-current={active ? 'page' : undefined}
                         onClick={() => { if (!active) { soundManager.playClick(); onChange(index); } }}
                         sx={{
+                            position: 'relative',
                             display: 'inline-flex', alignItems: 'center', gap: active ? 1 : 0,
-                            height: 44, px: active ? 2 : 1.5, border: 0, borderRadius: 999, cursor: 'pointer',
+                            height: 44, px: active ? 2 : { xs: 1.25, sm: 1.5 }, border: 0, borderRadius: 999, cursor: 'pointer',
                             font: 'inherit', fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap',
                             color: active ? '#0d0d0d' : cv.muted,
                             bgcolor: active ? '#fff' : 'transparent',
                             transition: 'background-color .25s, color .2s, padding .3s cubic-bezier(.22,1,.36,1), gap .3s',
                             '&:hover': { color: active ? '#0d0d0d' : cv.text },
-                            '& .dock-label': { maxWidth: active ? 90 : 0, opacity: active ? 1 : 0, overflow: 'hidden', transition: 'max-width .3s cubic-bezier(.22,1,.36,1), opacity .2s' },
+                            '& .dock-label': { maxWidth: active ? 100 : 0, opacity: active ? 1 : 0, overflow: 'hidden', transition: 'max-width .3s cubic-bezier(.22,1,.36,1), opacity .2s' },
                         }}
                     >
                         <Icon sx={{ fontSize: 21 }} />
                         <span className="dock-label">{label}</span>
+                        {!!badges[index] && (
+                            <Box component="span" aria-label={`${badges[index]} novas`} sx={{ position: 'absolute', top: 5, right: active ? 6 : 4, minWidth: 16, height: 16, px: '4px', borderRadius: 999, bgcolor: cv.accent, color: '#0d0d0d', fontSize: 10, fontWeight: 800, display: 'grid', placeItems: 'center', boxShadow: '0 0 0 2px rgba(32,32,32,.95)' }}>
+                                {badges[index] > 9 ? '9+' : badges[index]}
+                            </Box>
+                        )}
                     </Box>
                 );
             })}

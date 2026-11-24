@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   ThemeProvider,
   CssBaseline,
@@ -8,7 +8,7 @@ import {
   IconButton
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
-import { BrowserRouter as Router, Routes, Route, useNavigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, useNavigate, useParams, Navigate } from 'react-router-dom';
 import Dashboard from './components/Dashboard';
 import LessonContainer from './components/LessonContainer';
 import Welcome from './components/Welcome';
@@ -23,7 +23,17 @@ import { soundManager } from './utils/soundEffects';
 import { theme, cv } from './theme';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from './firebase';
-import { loadFromCloud, saveToCloud } from './services/cloudSync';
+import { readCloud, saveToCloud, mergeProgress } from './services/cloudSync';
+import { claimName, updatePublicProfile, heartbeat, toHandle, NameTakenError } from './services/social';
+import { syncLibrary } from './services/library';
+import NameClaimDialog from './components/NameClaimDialog';
+
+/** /add/<name> (from a friend's QR code): remember who to add, then open the app. */
+function AddFriendLink() {
+  const { handle } = useParams();
+  if (handle) localStorage.setItem('mivvi_pendingAdd', handle);
+  return <Navigate to="/dashboard" replace />;
+}
 
 function App() {
   // Check if user should see splash screen
@@ -150,59 +160,112 @@ function App() {
     }
   }, [userProfile])
 
-  // With an account, the profile and progress are also kept in the cloud.
-  useEffect(() => {
-    if (auth.currentUser && userProfile?.isOnboarded) saveToCloud({ profile: userProfile, progress: userProgress })
-  }, [userProfile, userProgress])
+  // ── Account sync ─────────────────────────────────────────────────────────
+  // The cloud copy is only written after it was read successfully once, so a
+  // failed read (offline, slow network) can never wipe an existing account.
+  const [syncedUid, setSyncedUid] = useState<string | null>(null)
+  const [nameConflict, setNameConflict] = useState(false)
+  const profileRef = useRef(userProfile)
+  const progressRef = useRef(userProgress)
+  profileRef.current = userProfile
+  progressRef.current = userProgress
 
-  // Restores an account's data when it was saved before (e.g. on another device).
-  const restoreFromCloud = async (): Promise<boolean> => {
-    const user = auth.currentUser
-    if (!user) return false
-    const cloud = await loadFromCloud(user.uid)
-    if (cloud?.profile?.isOnboarded) {
-      setUserProfile({ ...cloud.profile, uid: user.uid })
-      if (cloud.progress) setUserProgress((prev) => ({ ...prev, ...cloud.progress }))
-      return true
+  useEffect(() => {
+    if (syncedUid && auth.currentUser?.uid === syncedUid && userProfile?.isOnboarded) saveToCloud({ profile: userProfile, progress: userProgress }, syncedUid)
+  }, [userProfile, userProgress, syncedUid])
+
+  /** Takes the profile's name as this account's unique id (asks for another one if taken). */
+  const claimProfileName = async (uid: string, profile: UserProfile | null) => {
+    if (!profile?.name) return
+    const photo = auth.currentUser?.photoURL || null
+    try {
+      await claimName(uid, profile.name, { year: profile.schoolYear, xp: progressRef.current.xp, photo })
+      if (profile.handle !== toHandle(profile.name)) setUserProfile((p) => (p ? { ...p, handle: toHandle(profile.name!) } : p))
+      setNameConflict(false)
+    } catch (e) {
+      if (e instanceof NameTakenError) setNameConflict(true)
+      else console.warn('Could not reserve the name', e)
     }
-    return false
   }
 
-  useEffect(() => onAuthStateChanged(auth, async (user) => {
-    if (!user) return
-    const restored = await restoreFromCloud()
-    if (restored) {
+  const syncAccount = async (uid: string) => {
+    const result = await readCloud(uid)
+    if (auth.currentUser?.uid !== uid) return
+    if (result.status === 'error') return // try again later; never overwrite
+    const local = profileRef.current
+    if (result.status === 'ok') {
+      // The account already exists: it wins over a fresh profile on this device.
+      const cloud = result.data
+      const sameAccount = !local?.uid || local.uid === uid
+      const profile = { ...cloud.profile!, uid }
+      setUserProfile(profile)
+      setUserProgress((prev) => (cloud.progress ? (sameAccount ? mergeProgress(cloud.progress, prev) : { ...prev, ...cloud.progress }) : prev))
+      setSyncedUid(uid)
       if (['/welcome', '/onboarding', '/'].includes(window.location.pathname)) navigate('/dashboard')
+      if (!profile.handle && profile.name) claimProfileName(uid, profile)
     } else {
-      // First time with this account: keep what was done on this device.
-      const local = JSON.parse(localStorage.getItem('mivvi_userProfile') || 'null')
+      // A new account: what was done on this device becomes the account's data.
+      setSyncedUid(uid)
       if (local?.isOnboarded) {
-        const progress = JSON.parse(localStorage.getItem('mivvi_userProgress') || 'null')
-        saveToCloud({ profile: { ...local, uid: user.uid }, ...(progress && { progress }) }, user.uid)
+        const linked = { ...local, uid }
+        setUserProfile(linked)
+        saveToCloud({ profile: linked, progress: progressRef.current }, uid)
+        claimProfileName(uid, linked)
       }
     }
+    syncLibrary(uid)
+  }
+
+  useEffect(() => onAuthStateChanged(auth, (user) => {
+    setSyncedUid(null)
+    if (user) syncAccount(user.uid)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [])
+
+  // Back online after a failed read: try again.
+  useEffect(() => {
+    const retry = () => { const u = auth.currentUser; if (u && !syncedUid) syncAccount(u.uid) }
+    window.addEventListener('online', retry)
+    const t = setInterval(retry, 30000)
+    return () => { window.removeEventListener('online', retry); clearInterval(t) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [syncedUid])
+
+  // Public card (name, year, xp) and "online" status for friends.
+  useEffect(() => {
+    if (!syncedUid || !userProfile?.handle) return
+    const t = setTimeout(() => updatePublicProfile(syncedUid, { name: userProfile.name, handle: userProfile.handle, year: userProfile.schoolYear, xp: userProgress.xp, photo: auth.currentUser?.photoURL || null, lastSeen: Date.now() }), 2000)
+    return () => clearTimeout(t)
+  }, [syncedUid, userProfile?.name, userProfile?.handle, userProfile?.schoolYear, userProgress.xp])
+  useEffect(() => {
+    if (!syncedUid) return
+    const beat = () => { if (document.visibilityState === 'visible') heartbeat(syncedUid) }
+    const t = setInterval(beat, 60000)
+    document.addEventListener('visibilitychange', beat)
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', beat) }
+  }, [syncedUid])
 
   // Daily Bonus Check
 
 
   const navigate = useNavigate();
 
+  // From the welcome screen ("Começar", or after signing in).
   const handleStartLearning = async () => {
-    // Signed in but nothing on this device yet: look for the account's data first.
-    if (!userProfile?.isOnboarded && auth.currentUser && await restoreFromCloud()) {
-      navigate('/dashboard')
-      return
+    if (profileRef.current?.isOnboarded) { navigate('/dashboard'); return }
+    const user = auth.currentUser
+    if (user) {
+      // Signed in: an existing account goes straight to its data.
+      const result = await readCloud(user.uid)
+      if (result.status === 'ok') {
+        setUserProfile({ ...result.data.profile!, uid: user.uid })
+        if (result.data.progress) setUserProgress((prev) => mergeProgress(result.data.progress!, prev))
+        setSyncedUid(user.uid)
+        navigate('/dashboard')
+        return
+      }
     }
-    if (userProfile?.isOnboarded) {
-      navigate('/dashboard')
-    } else {
-      // If not onboarded, force them to onboarding (clear any stale data)
-      localStorage.removeItem('mivvi_userProfile');
-      localStorage.removeItem('mivvi_userProgress');
-      navigate('/onboarding')
-    }
+    navigate('/onboarding')
   }
 
   const handleSplashComplete = () => {
@@ -213,12 +276,18 @@ function App() {
       // User is already onboarded/logged in, go straight to dashboard
       navigate('/dashboard');
     } else {
-      navigate('/onboarding');
+      navigate('/welcome');
     }
   }
 
   const handleOnboardingComplete = (profile: UserProfile) => {
     setUserProfile(profile)
+    const user = auth.currentUser
+    if (user && syncedUid === user.uid) {
+      // Signed in with a new account: save and reserve the name now.
+      saveToCloud({ profile: { ...profile, uid: user.uid }, progress: progressRef.current }, user.uid)
+      claimProfileName(user.uid, profile)
+    }
     // Initialize specific subject progress if needed
     setUserProgress(prev => {
       const newSubjectProgress = { ...prev.subjectProgress || {} };
@@ -229,9 +298,8 @@ function App() {
       });
       return { ...prev, subjectProgress: newSubjectProgress, hasSeenTutorial: false }; // Ensure tutorial runs after onboarding
     });
-    // Clear last activity to show splash after onboarding
-    localStorage.removeItem('mivvi_lastActivity');
-    navigate('/welcome')
+    updateActivity();
+    navigate('/dashboard')
   }
 
   const handleStartLesson = (lessonId: number, clickCoords?: { x: number, y: number } | null) => {
@@ -251,8 +319,9 @@ function App() {
 
     updateActivity(); // Track activity
     setSelectedLesson(lessonId)
-    // Pass coordinates to generating screen for connected animation
-    navigate(`/lesson/${lessonId}`, { state: { clickCoords } })
+    // The subject goes in the URL so the lesson never opens the wrong one.
+    const subject = localStorage.getItem('mivvi_selectedSubject') || userProfile?.selectedSubjects?.[0] || ''
+    navigate(`/lesson/${lessonId}?s=${encodeURIComponent(subject)}`, { state: { clickCoords } })
   }
 
   const handleLessonComplete = (xpGained: number, correct: number, total: number, gemsEarned: number = 0, subject?: string) => {
@@ -410,7 +479,7 @@ function App() {
       if (userProfile?.isOnboarded) {
         navigate('/dashboard');
       } else {
-        navigate('/onboarding');
+        navigate('/welcome');
       }
       return;
     }
@@ -461,21 +530,18 @@ function App() {
                   onEquipOutfit={handleEquipOutfit}
                   onTutorialComplete={handleTutorialComplete}
                   onClaimMission={handleClaimMission}
-                  onUpdateProfile={(updates: Partial<UserProfile>) => { // Explicit type
-                    const newProfile = { ...userProfile, ...updates };
-                    setUserProfile(newProfile);
-                    localStorage.setItem('userProfile', JSON.stringify(newProfile));
+                  onUpdateProfile={(updates: Partial<UserProfile>) => {
+                    setUserProfile((p) => (p ? { ...p, ...updates } : p));
                   }}
                   userProfile={userProfile}
                 />
               ) : (
-                <Welcome onStart={handleStartLearning} userProfile={userProfile} />
+                <Navigate to="/welcome" replace />
               )}
             </PageTransition>
           } />
           <Route path="/lesson/:id" element={
             <PageTransition>
-              <PageTransition>
                 <LessonContainer
                   onComplete={handleLessonComplete}
                   onMistake={handleMistake}
@@ -490,7 +556,6 @@ function App() {
                   isTutorial={false}
                   completedLessons={userProgress.completedLessons}
                 />
-              </PageTransition>
             </PageTransition>
           } />
           <Route path="/ai-tutor" element={
@@ -503,6 +568,7 @@ function App() {
               <APITester />
             </PageTransition>
           } />
+          <Route path="/add/:handle" element={<AddFriendLink />} />
           <Route path="/reset" element={
             <PageTransition>
               <ResetData />
@@ -515,6 +581,16 @@ function App() {
           } />
         </Routes>
       )}
+      <NameClaimDialog
+        open={nameConflict && !!syncedUid}
+        currentName={userProfile?.name || ''}
+        uid={syncedUid || ''}
+        onDone={(name) => {
+          setNameConflict(false)
+          setUserProfile((p) => (p ? { ...p, name, handle: toHandle(name), lastNameChangeDate: new Date().toISOString() } : p))
+        }}
+        extra={{ year: userProfile?.schoolYear, xp: userProgress.xp, photo: auth.currentUser?.photoURL || null }}
+      />
       <Snackbar
         open={notification.open}
         autoHideDuration={3000}

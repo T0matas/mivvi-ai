@@ -118,7 +118,7 @@ export default function SubjectHome({ userProfile, userProgress, currentSubject,
 
             {/* Carry on: the next lesson, with what comes after it */}
             {focus && (
-                <Box key={focus} sx={{ mt: 3, borderRadius: '28px', bgcolor: cv.paper, boxShadow: `inset 0 0 0 1px ${cv.border}`, display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 300px' }, overflow: 'hidden', ...rise(0.06) }}>
+                <Box key={focus} sx={{ mt: 3, borderRadius: '28px', bgcolor: cv.paper, boxShadow: `inset 0 0 0 1px ${cv.border}`, display: 'grid', gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'minmax(0, 1fr) 300px' }, overflow: 'hidden', ...rise(0.06) }}>
                     <Box sx={{ p: { xs: 2.5, sm: 3.5 }, minWidth: 0 }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
                             <SubjectTile subject={focus} size={34} />
@@ -162,16 +162,16 @@ export default function SubjectHome({ userProfile, userProgress, currentSubject,
                     </Box>
 
                     {/* Up next */}
-                    <Box sx={{ p: { xs: 2.5, sm: 3 }, pt: { xs: 0, md: 3 }, borderLeft: { md: `1px solid ${cv.border}` }, bgcolor: { md: 'rgba(255,255,255,.015)' } }}>
+                    <Box sx={{ minWidth: 0, p: { xs: 2.5, sm: 3 }, pt: { xs: 0, md: 3 }, borderLeft: { md: `1px solid ${cv.border}` }, bgcolor: { md: 'rgba(255,255,255,.015)' } }}>
                         <Typography sx={{ fontSize: 12, fontWeight: 600, color: cv.muted, textTransform: 'uppercase', letterSpacing: '.06em', mb: 1.5, display: { xs: 'none', md: 'block' } }}>Próximas lições</Typography>
                         <Box sx={{ display: 'grid', gap: 0.5 }}>
                             {(next ? [next, ...upcoming] : []).map((l, i) => (
-                                <Box key={l.id} sx={{ display: 'flex', alignItems: 'center', gap: 1.25, py: 0.75, opacity: i === 0 ? 1 : 0.7 }}>
+                                <Box key={l.id} sx={{ display: 'flex', alignItems: 'center', gap: 1.25, py: 0.75, minWidth: 0, opacity: i === 0 ? 1 : 0.7 }}>
                                     <Box sx={{ width: 26, height: 26, borderRadius: '8px', flexShrink: 0, display: 'grid', placeItems: 'center', fontSize: 12, fontWeight: 700,
                                         bgcolor: i === 0 ? color : 'rgba(255,255,255,.06)', color: i === 0 ? '#1d2742' : cv.muted }}>{l.lessonNumber}</Box>
                                     {planning
                                         ? <Box sx={{ flex: 1, height: 10, borderRadius: 999, background: 'linear-gradient(90deg, #232323 25%, #2e2e2e 37%, #232323 63%)', backgroundSize: '400% 100%', animation: 'homeSkel 1.4s ease infinite', '@keyframes homeSkel': { from: { backgroundPosition: '100% 50%' }, to: { backgroundPosition: '0 50%' } } }} />
-                                        : <Typography sx={{ fontSize: 14, fontWeight: i === 0 ? 600 : 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.title}</Typography>}
+                                        : <Typography sx={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: i === 0 ? 600 : 500, lineHeight: 1.3, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{l.title}</Typography>}
                                 </Box>
                             ))}
                         </Box>

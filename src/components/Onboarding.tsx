@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Box, Typography } from '@mui/material'
 import { ArrowBack, ArrowForward, Check, Search } from '@mui/icons-material'
 import { SchoolYear, Subject, UserProfile } from '../types'
@@ -7,6 +7,10 @@ import { SubjectTile } from './SubjectDoodle'
 import { soundManager } from '../utils/soundEffects'
 import { COURSES, COURSE_TYPES, YEARS, isSecondary, subjectGroupsFor, subjectName, courseInfo, yearNumber, CourseInfo } from '../data/ptCurriculum'
 import { cv } from '../theme'
+import { auth } from '../firebase'
+import { onAuthStateChanged, User } from 'firebase/auth'
+import { isNameFree, nameProblem } from '../services/social'
+import LoginButtons from './LoginButtons'
 
 // Getting to know the student. On the left, Mivvi comments on each choice and
 // a profile card fills in as the student answers; on the right, one question
@@ -17,35 +21,64 @@ interface OnboardingProps {
     onComplete: (profile: UserProfile) => void
 }
 
-type Step = 'year' | 'course' | 'subjects'
+type Step = 'name' | 'year' | 'course' | 'subjects' | 'account'
 
 const TITLES: Record<Step, { title: string; hint: string }> = {
+    name: { title: 'Como te chamas?', hint: 'É o teu nome no Mivvi e o teu ID para os amigos te encontrarem. Tem de ser único.' },
+    account: { title: 'Guarda o teu progresso', hint: 'Com uma conta Google, continuas em qualquer dispositivo e podes falar com amigos.' },
     year: { title: 'Em que ano andas?', hint: 'As lições seguem o programa português do teu ano.' },
     course: { title: 'Qual é o teu curso?', hint: 'No secundário, as disciplinas dependem do curso.' },
     subjects: { title: 'Que disciplinas queres estudar?', hint: 'Escolhe uma ou mais. Podes mudar quando quiseres.' },
 }
 
+/** A name suggestion from the Google account: first name, only allowed characters. */
+const fromGoogle = (u: User | null) => (u?.displayName || '').split(' ')[0].normalize('NFC').replace(/[^\p{L}\p{N}_.]/gu, '').slice(0, 20)
+
 export default function Onboarding({ onComplete }: OnboardingProps) {
     const [stepIndex, setStepIndex] = useState(0)
+    const [user, setUser] = useState<User | null>(auth.currentUser)
+    const [name, setName] = useState(() => fromGoogle(auth.currentUser))
+    const [nameState, setNameState] = useState<'idle' | 'checking' | 'free' | 'taken' | 'unknown'>('idle')
+    useEffect(() => onAuthStateChanged(auth, (u) => { setUser(u); if (u && !name) setName(fromGoogle(u)) }), [])  // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Is the name free? Checked a moment after the student stops typing.
+    const problem = name.trim() ? nameProblem(name) : null
+    useEffect(() => {
+        if (!name.trim() || problem) { setNameState('idle'); return }
+        setNameState('checking')
+        let alive = true
+        const t = setTimeout(() => {
+            isNameFree(name, auth.currentUser?.uid)
+                .then((free) => { if (alive) setNameState(free ? 'free' : 'taken') })
+                .catch(() => { if (alive) setNameState('unknown') })
+        }, 450)
+        return () => { alive = false; clearTimeout(t) }
+    }, [name, problem])
     const [year, setYear] = useState<SchoolYear | null>(null)
     const [course, setCourse] = useState<string | null>(null)
     const [subjects, setSubjects] = useState<Subject[]>([])
     const [query, setQuery] = useState('')
 
-    const steps: Step[] = ['year', ...(isSecondary(year) ? ['course' as Step] : []), 'subjects']
+    const [startedSignedIn] = useState(() => !!auth.currentUser)
+    const steps: Step[] = ['name', 'year', ...(isSecondary(year) ? ['course' as Step] : []), 'subjects', ...(startedSignedIn ? [] : ['account' as Step])]
     const step = steps[stepIndex]
     const groups = subjectGroupsFor(year, course)
     const allSubjects = [...new Set(groups.flatMap((g) => g.items))]
     const many = allSubjects.length > 10
     const q = query.trim().toLowerCase()
 
-    const valid = (step === 'year' && !!year) || (step === 'course' && !!course) || (step === 'subjects' && subjects.length > 0)
+    const valid = (step === 'name' && !!name.trim() && !problem && nameState !== 'taken' && nameState !== 'checking')
+        || (step === 'year' && !!year) || (step === 'course' && !!course) || (step === 'subjects' && subjects.length > 0) || step === 'account'
+
+    const finish = (uid?: string) => {
+        soundManager.playSuccess()
+        onComplete({ name: name.trim(), schoolYear: year!, course: isSecondary(year) ? course || undefined : undefined, selectedSubjects: subjects, difficulty: 'medium', language: 'pt-PT', isOnboarded: true, ...(uid && { uid }) })
+    }
 
     const next = () => {
         if (!valid) return
         if (stepIndex < steps.length - 1) { soundManager.playClick(); setStepIndex(stepIndex + 1); setQuery(''); return }
-        soundManager.playSuccess()
-        onComplete({ schoolYear: year!, course: isSecondary(year) ? course || undefined : undefined, selectedSubjects: subjects, difficulty: 'medium', language: 'pt-PT', isOnboarded: true })
+        finish(user?.uid)
     }
     const back = () => { if (stepIndex > 0) { soundManager.playClick(); setStepIndex(stepIndex - 1) } }
 
@@ -60,12 +93,15 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
 
     // What Mivvi says, reacting to the answers so far.
     const comment = (() => {
+        if (step === 'name') return name.trim() && !problem ? `Prazer, ${name.trim()}! 👋` : 'Olá! Sou o Mivvi. Primeiro, como te chamas?'
+        if (step === 'account') return user ? 'Conta ligada! Já podes começar.' : 'Quase lá! Queres guardar o teu progresso?'
         if (step === 'year') return year ? `${yearNumber(year)}.º ano, boa! Vamos a isso.` : 'Olá! Sou o Mivvi. Vamos montar o teu plano de estudo.'
         if (step === 'course') return course ? `${courseInfo(course)?.name}? Fixe!` : 'E o teu curso? Assim sei que disciplinas tens.'
         return subjects.length ? `${subjects.length} ${subjects.length === 1 ? 'disciplina' : 'disciplinas'}. Vou preparar um plano para cada uma, ao nível do teu ano.` : 'Agora escolhe o que queres praticar comigo.'
     })()
 
     const summary: { step: Step; label: string; value: string | null }[] = [
+        { step: 'name', label: 'Nome', value: name.trim() && !problem ? name.trim() : null },
         { step: 'year', label: 'Ano', value: year ? `${yearNumber(year)}.º ano` : null },
         ...(isSecondary(year) ? [{ step: 'course' as Step, label: 'Curso', value: courseInfo(course)?.name || null }] : []),
         { step: 'subjects', label: 'Disciplinas', value: subjects.length ? `${subjects.length} escolhidas` : null },
@@ -141,6 +177,42 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
                     <Typography sx={{ fontSize: 13, color: cv.muted, fontWeight: 600 }}>Passo {stepIndex + 1} de {steps.length}</Typography>
                     <Typography component="h1" sx={{ fontFamily: cv.display, fontSize: { xs: 26, sm: 32 }, fontWeight: 700, letterSpacing: '-0.03em', lineHeight: 1.15, mt: 0.5 }}>{TITLES[step].title}</Typography>
                     <Typography sx={{ color: cv.muted, fontSize: 15, mt: 0.75, mb: 3 }}>{TITLES[step].hint}</Typography>
+
+                    {/* Name: the student's unique id */}
+                    {step === 'name' && (
+                        <Box sx={{ maxWidth: 460 }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, height: 56, px: 2, borderRadius: '18px', bgcolor: cv.paper,
+                                boxShadow: `inset 0 0 0 1.5px ${nameState === 'taken' || problem ? cv.coral : nameState === 'free' ? cv.green : cv.borderStrong}`, transition: 'box-shadow .2s' }}>
+                                <Box component="span" sx={{ color: cv.faint, fontSize: 18, fontWeight: 600 }}>@</Box>
+                                <Box component="input" autoFocus value={name} maxLength={20} placeholder="o teu nome" autoComplete="nickname" spellCheck={false}
+                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value.replace(/\s/g, ''))}
+                                    onKeyDown={(e: React.KeyboardEvent) => { if (e.key === 'Enter') next() }}
+                                    sx={{ flex: 1, minWidth: 0, border: 0, outline: 'none', bgcolor: 'transparent', color: cv.text, font: 'inherit', fontSize: 18, fontWeight: 600, '&::placeholder': { color: cv.faint, fontWeight: 500 } }} />
+                                <Typography sx={{ fontSize: 12.5, color: cv.faint, fontVariantNumeric: 'tabular-nums' }}>{name.length}/20</Typography>
+                            </Box>
+                            <Typography sx={{ mt: 1, fontSize: 13.5, minHeight: 20, color: problem || nameState === 'taken' ? cv.coral : nameState === 'free' ? cv.green : cv.muted }}>
+                                {problem || (nameState === 'checking' ? 'A verificar…' : nameState === 'taken' ? 'Esse nome já existe. Experimenta outro (por exemplo com um número).' : nameState === 'free' ? 'Este nome está livre ✓' : nameState === 'unknown' ? 'Não deu para verificar agora; confirmamos quando criares a conta.' : 'Letras, números, "_" ou ".", sem espaços.')}
+                            </Typography>
+                        </Box>
+                    )}
+
+                    {/* Account: optional, keeps progress across devices */}
+                    {step === 'account' && (
+                        <Box sx={{ maxWidth: 400, p: 2.5, borderRadius: '24px', bgcolor: cv.paper, boxShadow: `inset 0 0 0 1px ${cv.border}` }}>
+                            {user ? (
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                                    <Box sx={{ width: 36, height: 36, borderRadius: '50%', bgcolor: cv.green, color: '#0d0d0d', display: 'grid', placeItems: 'center' }}><Check /></Box>
+                                    <Box>
+                                        <Typography sx={{ fontWeight: 600 }}>{user.displayName || 'Conta ligada'}</Typography>
+                                        <Typography sx={{ fontSize: 13, color: cv.muted }}>{user.email}</Typography>
+                                    </Box>
+                                </Box>
+                            ) : (
+                                <LoginButtons onSuccess={({ user: u }) => finish(u.uid)} onError={() => soundManager.playError()} />
+                            )}
+                            <Typography sx={{ fontSize: 12.5, color: cv.faint, mt: 2, lineHeight: 1.5 }}>Se já tens conta no Mivvi, continuas exatamente onde ficaste.</Typography>
+                        </Box>
+                    )}
 
                     {/* Year: number tiles by cycle */}
                     {step === 'year' && cycles.map((cycle) => (
@@ -235,7 +307,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
                         sx={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 1, height: 46, minWidth: { xs: 160, sm: 200 }, px: 3, border: 0, borderRadius: 999, font: 'inherit', fontSize: 15, fontWeight: 600, cursor: 'pointer',
                             bgcolor: '#fff', color: '#0d0d0d', transition: 'background-color .15s, opacity .2s',
                             '&:hover:not(:disabled)': { bgcolor: '#e6e6e6' }, '&:disabled': { bgcolor: cv.surface, color: cv.faint, cursor: 'default' } }}>
-                        {stepIndex === steps.length - 1 ? 'Começar' : 'Continuar'}
+                        {step === 'account' && !user ? 'Continuar sem conta' : stepIndex === steps.length - 1 ? 'Começar' : 'Continuar'}
                         {stepIndex === steps.length - 1 ? <Check sx={{ fontSize: 19 }} /> : <ArrowForward sx={{ fontSize: 19 }} />}
                     </Box>
                 </Box>

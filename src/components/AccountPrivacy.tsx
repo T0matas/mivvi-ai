@@ -1,10 +1,11 @@
 import { Box, Typography, Dialog } from '@mui/material'
 import { useEffect, useState, ReactNode } from 'react'
 import { onAuthStateChanged, signOut, User } from 'firebase/auth'
-import { CheckRounded, DownloadRounded, RefreshRounded, DeleteOutlineRounded, PhoneIphoneRounded, AutoAwesomeRounded, AccountCircleRounded, VolumeUpRounded } from '@mui/icons-material'
+import { CheckRounded, DownloadRounded, RefreshRounded, DeleteOutlineRounded, PhoneIphoneRounded, AutoAwesomeRounded, AccountCircleRounded, VolumeUpRounded, SchoolRounded } from '@mui/icons-material'
 import { auth } from '../firebase'
-import { UserProfile, UserProgress, SchoolYear } from '../types'
-import { YEARS, COURSES, isSecondary, subjectsFor, subjectGroupsFor, courseInfo } from '../data/ptCurriculum'
+import { UserProfile, UserProgress } from '../types'
+import { YEARS, isSecondary, courseInfo } from '../data/ptCurriculum'
+import SchoolYearDialog from './SchoolYearDialog'
 import { soundManager } from '../utils/soundEffects'
 import LoginButtons from './LoginButtons'
 import Mascot from './Mascot'
@@ -49,6 +50,7 @@ export default function AccountPrivacy({ userProfile, userProgress, onUpdateProf
     const [sound, setSound] = useState(soundManager.isEnabled())
     const [confirm, setConfirm] = useState<null | 'signout' | 'delete'>(null)
     const [done, setDone] = useState('')
+    const [yearOpen, setYearOpen] = useState(false)
 
     useEffect(() => onAuthStateChanged(auth, setUser), [])
     useEffect(() => { if (!done) return; const t = setTimeout(() => setDone(''), 2500); return () => clearTimeout(t) }, [done])
@@ -58,16 +60,6 @@ export default function AccountPrivacy({ userProfile, userProgress, onUpdateProf
         bgcolor: 'transparent', color: danger ? cv.coral : cv.text, boxShadow: `inset 0 0 0 1px ${danger ? 'rgba(255,159,136,.4)' : cv.borderStrong}`,
         '&:hover': { bgcolor: danger ? 'rgba(255,159,136,.08)' : 'rgba(255,255,255,.05)' },
     })
-
-    // ── School settings: keep only the subjects that exist in the new year/course ──
-    const changeSchool = (schoolYear: SchoolYear, course?: string) => {
-        soundManager.playClick()
-        const nextCourse = isSecondary(schoolYear) ? course : undefined
-        const available = subjectsFor(schoolYear, nextCourse)
-        let subjects = userProfile.selectedSubjects.filter((s) => available.includes(s))
-        if (!subjects.length) subjects = subjectGroupsFor(schoolYear, nextCourse)[0]?.items.slice(0, 4) || []
-        onUpdateProfile?.({ schoolYear, course: nextCourse, ...(subjects.length && { selectedSubjects: subjects }) })
-    }
 
     // ── Data controls ──
     const download = () => {
@@ -137,22 +129,13 @@ export default function AccountPrivacy({ userProfile, userProgress, onUpdateProf
 
             {/* School */}
             <Section title="Estudos" delay={0.1}>
-                <Row first title="Ano" detail="As lições seguem o programa português deste ano.">
-                    <Box component="select" value={userProfile.schoolYear || ''} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => changeSchool(e.target.value as SchoolYear, userProfile.course)}
-                        sx={{ height: 36, px: 1.5, border: 0, borderRadius: 999, bgcolor: 'rgba(255,255,255,.06)', color: cv.text, font: 'inherit', fontSize: 14, fontWeight: 600, cursor: 'pointer', colorScheme: 'dark', outline: 'none' }}>
-                        {YEARS.map((y) => <option key={y.value} value={y.value}>{y.n}.º ano</option>)}
-                    </Box>
+                <Row first icon={<SchoolRounded />} title="Ano escolar"
+                    detail={`${n ? `${n}.º ano` : 'Sem ano'}${isSecondary(userProfile.schoolYear) && courseInfo(userProfile.course) ? ` · ${courseInfo(userProfile.course)!.name}` : ''}. As lições seguem o programa deste ano.`}>
+                    <Box component="button" onClick={() => { soundManager.playClick(); setYearOpen(true) }} sx={action()}>Mudar ano</Box>
                 </Row>
-                {isSecondary(userProfile.schoolYear) && (
-                    <Row title="Curso" detail={courseInfo(userProfile.course)?.name || 'Ainda não escolheste o teu curso.'}>
-                        <Box component="select" value={userProfile.course || ''} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => changeSchool(userProfile.schoolYear!, e.target.value)}
-                            sx={{ height: 36, px: 1.5, border: 0, borderRadius: 999, bgcolor: 'rgba(255,255,255,.06)', color: cv.text, font: 'inherit', fontSize: 14, fontWeight: 600, cursor: 'pointer', colorScheme: 'dark', outline: 'none', maxWidth: 220 }}>
-                            <option value="" disabled>Escolher…</option>
-                            {COURSES.map((c) => <option key={c.id} value={c.id}>{c.short} · {c.name}</option>)}
-                        </Box>
-                    </Row>
-                )}
             </Section>
+            <SchoolYearDialog open={yearOpen} profile={userProfile} onClose={() => setYearOpen(false)}
+                onSave={(u) => { onUpdateProfile?.(u); setYearOpen(false); setDone('Ano escolar atualizado.') }} />
 
             {/* Preferences */}
             <Section title="Preferências" delay={0.14}>
@@ -167,7 +150,7 @@ export default function AccountPrivacy({ userProfile, userProgress, onUpdateProf
             {/* Privacy */}
             <Section title="Privacidade" delay={0.18}>
                 <Row first icon={<PhoneIphoneRounded />} title="Guardado neste dispositivo"
-                    detail={`O teu perfil${n ? ` (${n}.º ano)` : ''}, progresso (${userProgress.xp} XP, ${userProgress.completedLessons.length} lições), amigos e ${plans} ${plans === 1 ? 'plano de lições' : 'planos de lições'}. Não saem do teu dispositivo.`} />
+                    detail={`O teu perfil${n ? ` (${n}.º ano)` : ''}, progresso (${userProgress.xp} XP, ${userProgress.completedLessons.length} lições), biblioteca e ${plans} ${plans === 1 ? 'plano de lições' : 'planos de lições'}. ${user ? 'Com conta, ficam também guardados na tua conta para usares noutro dispositivo.' : 'Sem conta, não saem do teu dispositivo.'}`} />
                 <Row icon={<AutoAwesomeRounded />} title="Enviado para a IA"
                     detail="As tuas mensagens ao Mivvi, as fotos que anexas e o áudio do microfone vão para o serviço de IA (Groq) só para gerar a resposta. O Mivvi não os guarda." />
                 <Row icon={<AccountCircleRounded />} title="Conta Google"

@@ -35,6 +35,35 @@ const LANGUAGES = {
 const clean = (value, max = MAX_CONTEXT_CHARS) => (typeof value === 'string' ? value.slice(0, max).trim() : '');
 const languageName = (code) => LANGUAGES[code] || LANGUAGES['pt-PT'];
 
+
+// What each subject is really about, so the AI never drifts into another one
+// (e.g. Educação Física asking about planets).
+const SUBJECT_GUIDES = {
+  ed_fisica: 'Physical Education: physical capacities (strength, speed, endurance, flexibility, coordination), warm-up and stretching, training and health, heart rate, nutrition and hydration for sport, rules, positions and techniques of the sports taught in Portuguese schools (football, basketball, volleyball, handball, athletics, gymnastics, badminton), fair play and safety. Never physics or general science trivia.',
+  ed_musical: 'Music Education: rhythm, pulse, note values, staff and notes, dynamics, timbre, instruments and their families, musical genres and composers, listening.',
+  ed_visual: 'Visual Education: elements of visual language (point, line, shape, colour, texture), colour theory, composition, perspective, drawing techniques, design and art history examples.',
+  ed_artistica: 'Arts Education for primary school: colours, shapes, drawing, music, drama and dance basics.',
+  ed_tecnologica: 'Technological Education: materials, tools, technical drawing, structures, mechanisms, energy in objects, the design process, safety.',
+  tic: 'ICT: computers and devices, files and folders, internet safety, digital citizenship, word processing, spreadsheets, presentations, basic programming and algorithms.',
+  cidadania: 'Citizenship and Development: human rights, equality, environment and sustainability, health, media literacy, democracy and institutions, road safety.',
+  emrc: 'Moral and Religious Education: values, ethics, respect, solidarity, religions and their traditions, the meaning of life.',
+  estudo_meio: 'Estudo do Meio (primary): the body and health, family and community, the local environment, plants and animals, materials, weather, Portugal\'s geography and history basics, road safety.',
+  hgp: 'História e Geografia de Portugal (2nd cycle): Iberian Peninsula, formation of Portugal, discoveries, Portuguese history up to today, and Portugal\'s geography.',
+  filosofia: 'Philosophy: argument and logic, action and values, ethics, political philosophy, knowledge, aesthetics.',
+  filosofia_a: 'Philosophy: argument and logic, action and values, ethics, political philosophy, knowledge, aesthetics.',
+};
+
+const FOREIGN = { ingles: 'en', frances: 'fr', espanhol: 'es', alemao: 'de', italiano: 'it' };
+/** For foreign-language subjects, the language the lesson itself is written in. */
+const contentLanguage = (ctx) => FOREIGN[clean(ctx.subjectId, 40)] || null;
+
+const subjectBlock = (ctx) => {
+  const id = clean(ctx.subjectId, 40);
+  const guide = SUBJECT_GUIDES[id];
+  return `- Subject: ${clean(ctx.subject, 120)}${guide ? `\n- What this subject covers: ${guide}` : ''}
+- Every item must belong to the subject "${clean(ctx.subject, 120)}" and its own content, never to another subject.`;
+};
+
 const FORMATTING = 'Format: short paragraphs separated by a blank line, lists with "- ", **bold** only for a key word, *italics* for examples, and code or formulas that need it in ``` blocks. When the student asks for a table, or when comparing several items, use a real Markdown table (a header row, a |---| separator row, then one row per item). No headings, no HTML.';
 
 // System prompts live here so clients cannot rewrite Kodu's instructions.
@@ -50,6 +79,10 @@ ${ctx.name ? `The student's name is ${clean(ctx.name, 40)}.` : ''}
 ${ctx.schoolYear ? `School year: ${clean(ctx.schoolYear)}.` : ''}
 ${subjects.length ? `Subjects they study: ${subjects.join(', ')}.` : ''}
 ${ctx.subject ? `They are currently studying: ${clean(ctx.subject, 80)}.` : ''}
+${ctx.lessonTopic ? `They are in a lesson about: "${clean(ctx.lessonTopic, 120)}".` : ''}
+${ctx.lessonSummary ? `What the lesson explained: ${clean(ctx.lessonSummary, 1200)}` : ''}
+${ctx.question ? `The exercise on screen: "${clean(ctx.question, 300)}"${Array.isArray(ctx.options) && ctx.options.length ? ` Options: ${ctx.options.map((o) => clean(String(o), 80)).join(' | ')}.` : ''}
+${ctx.answered ? `They already answered it. The correct answer is "${clean(ctx.correctAnswer, 120)}": you may explain it fully.` : 'They have NOT answered it yet: never say which option or answer is correct, never eliminate options to leave only one, and do not solve it for them. Explain the idea behind it, give a hint or a similar example, and let them decide.'}` : ''}
 
 Always reply in ${languageName(ctx.language)}.
 
@@ -70,90 +103,156 @@ Rules:
     temperature: 0.6,
     json: true,
     system: `You are Mivvi, the mascot and AI tutor of the Mivvi learning app (built on Codevantum AI).
-A student just answered an exercise. Reply in ${languageName(ctx.language)} with a JSON object:
+A student just answered an exercise. Reply in ${languageName(contentLanguage(ctx) || ctx.language)} (simple words a student of this year understands) with a JSON object:
 {"feedback": "a 1-3 word reaction", "explanation": "one or two short sentences on why the answer is right or wrong", "encouragement": "one short, warm closing remark"}
 Tone: calm, friendly, encouraging. No emojis in "explanation". Return only the JSON object.`,
     user: `Question: "${clean(ctx.question)}"
 Correct answer: "${clean(ctx.correctAnswer)}"
-${ctx.userAnswer ? `Student's answer: "${clean(ctx.userAnswer)}"\n` : ''}The student answered ${ctx.isCorrect ? 'correctly' : 'incorrectly'}.`,
+${ctx.userAnswer ? `Student's answer: "${clean(ctx.userAnswer)}"\n` : ''}The student answered ${ctx.isCorrect ? 'correctly' : 'incorrectly'}.${ctx.isCorrect && ctx.userAnswer && clean(ctx.userAnswer).toLowerCase() !== clean(ctx.correctAnswer).toLowerCase() ? ' Their wording differs from the expected answer but means the same: accept it and, kindly, show the usual form.' : ''}`,
   }),
 
   exercises: (ctx) => {
-    const language = languageName(ctx.language);
+    const target = contentLanguage(ctx);
+    const language = target ? languageName(target) : languageName(ctx.language);
+    const kinds = ctx.isMath
+      ? 'This is Mathematics: use only "multiple-choice" and "typing" exercises, with numbers and operations suitable for the grade.'
+      : ctx.isLanguage
+        ? 'Mix the types in random order: 2 listening exercises (multiple-choice with "exerciseType": "listening"), 6 multiple-choice and 2 typing exercises.'
+        : 'Use 7 multiple-choice and 3 typing exercises, in random order. Do not use listening or speaking exercises for this subject.';
     return {
       model: CODEVANTUM_MODELS.smart,
-      maxTokens: 6000,
-      temperature: 0.8,
+      maxTokens: 7000,
+      temperature: 0.7,
       json: true,
-      system: `You are Mivvi, the AI tutor of the Mivvi learning app (built on Codevantum AI), writing a lesson.
+      system: `You are Mivvi, the AI tutor of the Mivvi learning app (built on Codevantum AI), writing the exercises of a lesson.
 Return only a JSON object of the form {"exercises": [ ... ]}, with no markdown.`,
       user: `Create exactly 10 distinct exercises for one student.
 
-Context:
-- Subject: ${clean(ctx.subject, 120)}
+${subjectBlock(ctx)}
 - Student level: ${clean(ctx.schoolYear, 120)}${ctx.course ? `\n- Course: ${clean(ctx.course, 120)}` : ''}
-${ctx.topic ? `- This lesson's topic: "${clean(ctx.topic, 120)}"${ctx.topicDescription ? ` (${clean(ctx.topicDescription, 200)})` : ''}. Every question must be about this topic.
-` : ''}- Curriculum: the official Portuguese curriculum (Aprendizagens Essenciais of the Ministério da Educação) for this subject and year${ctx.lessonNumber ? `\n- This is lesson ${Number(ctx.lessonNumber)} of ${Number(ctx.totalLessons) || 20}: cover the topics that come at this point of the school year, in curriculum order (early lessons = first topics of the year, last lessons = final topics)` : '\n- This is a mixed review of the whole year'}
+${ctx.topic ? `- This lesson's topic: "${clean(ctx.topic, 120)}"${ctx.topicDescription ? ` (${clean(ctx.topicDescription, 200)})` : ''}. Every question must practise this topic, the one the teacher just explained.
+` : ''}${ctx.theory ? `- What the teacher explained in this lesson (the exercises must test exactly this): ${clean(ctx.theory, 1500)}\n` : ''}- Curriculum: the official Portuguese curriculum (Aprendizagens Essenciais of the Ministério da Educação) for this subject and year${ctx.lessonNumber ? `\n- This is lesson ${Number(ctx.lessonNumber)} of ${Number(ctx.totalLessons) || 20}: topics that come at this point of the school year` : '\n- This is a mixed review of the whole year'}
 - Level: exactly the level expected of a student in this school year — not easier, not harder
-- Student's language: ${language} (every "question" and "hint" MUST be written in this language)
+- Language: ${target
+  ? `this is a foreign-language class, so EVERYTHING ("question", "options", "correctAnswer", "hint", "audioText", visuals) is written in ${language}, using vocabulary and sentence length a student of this year can read. Do not write in Portuguese.`
+  : `every "question", "options" and "hint" MUST be written in ${language}.`}
 
 Requirements:
-1. Cover different sub-topics suitable for this level; no two questions may be similar.
+1. Cover different points of the topic; no two questions may be similar.
 2. Questions must be engaging and age-appropriate.
-3. If the subject is a LANGUAGE (Portuguese, English, French, Spanish, German, Italian), ask only grammar, vocabulary, reading comprehension or conjugation questions, never maths. The question is written in ${language}; the content being asked about is in the subject's language. Example (student speaks Spanish, subject English): "question": "¿Cómo se dice 'gato' en inglés?", "correctAnswer": "Cat".
-4. Every question must be about the subject's own content (e.g. Biology asks about living things, History about events), never about grammar of another subject.
-5. ${ctx.isMath
-  ? 'This is Mathematics: use only "multiple-choice" and "typing" exercises, with numbers and operations suitable for the grade.'
-  : ctx.isLanguage
-    ? 'Mix the types in random order: 3 listening exercises (multiple-choice with "exerciseType": "listening"), 5 multiple-choice and 2 typing exercises.'
-    : 'Use 7 multiple-choice and 3 typing exercises, in random order. Do not use listening or speaking exercises for this subject.'}
-6. Listening exercises: "audioText" is the sentence the student hears; the "question" says what to do (e.g. "What did you hear?") and must NOT repeat or reveal the audio text.
-7. Typing exercises must have one short, unambiguous answer (a word, number or short phrase) so it can be checked automatically.
-8. Multiple-choice: exactly 4 short options of similar length, only one correct, the correct one copied exactly into "correctAnswer".
-9. Never use placeholders such as "...", "___" or "[blank]" unless the question is a fill-in-the-gap whose missing word is the answer.
-10. Write the "question" as one clear sentence; keep it under 140 characters.
+3. ${kinds}
+4. Listening exercises: "audioText" is the sentence the student hears; the "question" says what to do and must NOT repeat or reveal the audio text.
+5. Typing exercises: one short answer (a word, number or short phrase). Put in "acceptedAnswers" every other answer that is also right: synonyms, the answer with or without units or articles, other spellings, numerals vs words (e.g. correctAnswer "100 °C", acceptedAnswers ["100", "100 graus", "cem graus"]).
+6. Multiple-choice: exactly 4 short options of similar length, only one correct, the correct one copied exactly into "correctAnswer".
+7. Never use placeholders such as "...", "___" or "[blank]" unless the question is a fill-in-the-gap whose missing word is the answer.
+8. Write the "question" as one clear sentence; keep it under 140 characters.
+9. Never ask general-knowledge trivia from other subjects (planets, boiling points, capitals…) unless that IS this subject's topic.
 
 Each exercise has this shape:
 {
-  "type": "multiple-choice" | "typing" | "speaking",
-  "exerciseType": "text" | "listening" | "speaking",
+  "type": "multiple-choice" | "typing",
+  "exerciseType": "text" | "listening",
   "question": "string",
-  "audioText": "string (REQUIRED when exerciseType is listening or speaking: the words to hear or say)",
+  "audioText": "string (REQUIRED when exerciseType is listening)",
   "correctAnswer": "string",
-  "options": ["4 strings for multiple-choice, one of them the correct answer; [] for typing/speaking"],
+  "acceptedAnswers": ["for typing: other right answers; [] otherwise"],
+  "options": ["4 strings for multiple-choice, one of them the correct answer; [] for typing"],
   "hint": "a helpful hint that does not give the answer away",
   "visual": one object that helps the student think about the question (it must NOT reveal the answer), chosen from:
     {"kind": "excerpt", "text": "a short passage, verse, sentence or source (max 300 characters)", "source": "author or origin, optional"}
-    {"kind": "formula", "text": "an expression, equation or chemical formula with the unknown shown as ? or x, e.g. 4 × 10 + 7 = ? or 2x + 3 = 11 — never write the result being asked"}
+    {"kind": "formula", "text": "an expression with the unknown shown as ? or x — never write the result being asked"}
     {"kind": "table", "headers": ["..."], "rows": [["..."]]}   (2–4 columns, 2–5 rows)
     {"kind": "bars", "title": "...", "items": [{"label": "...", "value": 12}]}   (2–6 numeric items)
-    {"kind": "list", "title": "...", "items": ["..."]}   (2–5 short items, e.g. data, events in order, word bank)
-  Prefer excerpt for reading/literature/languages, formula for maths/physics/chemistry, table or bars for data, list for sequences or word banks.
+    {"kind": "list", "title": "...", "items": ["..."]}   (2–5 short items)
+  Prefer excerpt for reading/languages, formula for maths/physics/chemistry, table or bars for data, list for sequences or word banks. Use "visual": null when nothing useful fits.
 }
-Every exercise MUST include a "visual", and the visual must never contain the correct answer.
-If "exerciseType" is "speaking", "type" must be "speaking".`,
+The visual must never contain the correct answer.`,
     };
   },
 
-  // The year's lesson plan for one subject: titles the home screen and lessons use.
-  plan: (ctx) => ({
-    model: CODEVANTUM_MODELS.smart,
-    maxTokens: 4000,
-    temperature: 0.4,
-    json: true,
-    system: `You are Mivvi, the AI tutor of the Mivvi learning app (built on Codevantum AI), planning a school year.
-Return only a JSON object {"lessons": [{"title": "...", "description": "..."}]}, with no markdown.`,
-    user: `Plan exactly ${Math.min(30, Math.max(5, Number(ctx.count) || 20))} lessons that cover the whole school year of this subject, in the order it is taught.
+  // The "aula": what a teacher explains before the exercises.
+  lesson: (ctx) => {
+    const target = contentLanguage(ctx);
+    const language = target ? languageName(target) : languageName(ctx.language);
+    return {
+      model: CODEVANTUM_MODELS.smart,
+      maxTokens: 5000,
+      temperature: 0.5,
+      json: true,
+      system: `You are Mivvi, the AI tutor of the Mivvi learning app (built on Codevantum AI), teaching a short class like a good teacher before the exercises.
+Return only a JSON object, with no markdown.`,
+      user: `Write the explanation part of one lesson.
 
-- Subject: ${clean(ctx.subject, 120)}
+${subjectBlock(ctx)}
+- Student level: ${clean(ctx.schoolYear, 120)}${ctx.course ? `\n- Course: ${clean(ctx.course, 120)}` : ''}
+- Topic: "${clean(ctx.topic, 120) || 'a review of the main topics of the year'}"${ctx.topicDescription ? ` (${clean(ctx.topicDescription, 200)})` : ''}
+- Follow the official Portuguese curriculum (Aprendizagens Essenciais) for this subject and year.
+- Write in ${language}${target ? ' (this is a foreign-language class: explain in simple ' + language + ' that a student of this year can follow, with short sentences)' : ''}, warm and clear, addressing the student as "tu" when writing in Portuguese.
+
+Return:
+{
+  "title": "the topic, max 50 characters",
+  "intro": "one or two sentences that hook the student with an everyday situation",
+  "goals": ["2 to 3 short things the student will be able to do after this class (max 70 characters)"],
+  "sections": [
+    {
+      "heading": "max 40 characters",
+      "body": "2 or 3 short sentences explaining ONE idea, simply",
+      "points": ["optional: 2 to 4 short bullet facts (max 80 characters)"],
+      "terms": [{"term": "a key word", "meaning": "its meaning in max 70 characters"}],
+      "diagram": optional, ONE of:
+        {"kind": "steps", "title": "...", "items": [{"label": "short", "text": "max 60 chars"}]}     (a process in order, 3-5 items)
+        {"kind": "compare", "title": "...", "items": [{"label": "option name", "text": "its features, max 80 chars"}]}   (2-3 things side by side)
+        {"kind": "layers", "title": "...", "items": [{"label": "top layer", "text": "..."}]}   (a structure from top to bottom, 3-5 items)
+        {"kind": "cycle", "title": "...", "items": [{"label": "...", "text": "..."}]}   (a cycle that repeats, 3-5 items)
+      "image": "optional: the exact title of a Wikipedia article (in the student's language when possible) whose main picture shows this idea, e.g. \"Núcleo (sistema operativo)\", \"Fotossíntese\", \"Basquetebol\"",
+      "example": "one concrete worked example",
+      "minutes": 2
+    }
+  ],
+  "keyPoints": ["4 to 6 short sentences to remember (max 90 characters each)"],
+  "think": "one short question that makes the student reflect (no answer)"
+}
+Use 3 or 4 sections that build on each other. Give a "diagram" to at least two sections and an "image" to the sections where a real photo or figure helps. Keep sentences short: the student reads on a phone. No HTML. You may use **bold** for a key word.`,
+    };
+  },
+
+  // Is a typed answer right even though it is not written exactly like the expected one?
+  grade: (ctx) => ({
+    model: CODEVANTUM_MODELS.fast,
+    maxTokens: 300,
+    temperature: 0,
+    json: true,
+    system: `You check a student's typed answer to a school exercise. Be fair: accept answers that mean the same as the expected answer (synonyms, other spellings, small typos, missing accents, with or without units or articles, numbers written as words, equivalent values). Reject answers that are wrong, incomplete in meaning, or about something else.
+Also accept an answer that is more specific but still right (e.g. "resistência aeróbia" for "resistência").
+Return only a JSON object: {"correct": true} or {"correct": false}.`,
+    user: `Question: "${clean(ctx.question)}"
+Expected answer: "${clean(ctx.correctAnswer)}"
+Student's answer: "${clean(ctx.userAnswer)}"`,
+  }),
+
+  // The year's lesson plan for one subject: titles the home screen and lessons use.
+  plan: (ctx) => {
+    const target = contentLanguage(ctx);
+    return {
+      model: CODEVANTUM_MODELS.smart,
+      maxTokens: 4000,
+      temperature: 0.4,
+      json: true,
+      system: `You are Mivvi, the AI tutor of the Mivvi learning app (built on Codevantum AI), planning a school year.
+Return only a JSON object {"lessons": [{"title": "...", "description": "..."}]}, with no markdown.`,
+      user: `Plan exactly ${Math.min(30, Math.max(5, Number(ctx.count) || 20))} lessons that cover the whole school year of this subject, in the order it is taught.
+
+${subjectBlock(ctx)}
 - Year: ${clean(ctx.schoolYear, 120)}${ctx.course ? `
 - Course: ${clean(ctx.course, 120)}` : ''}
-- Plan ONLY topics of the subject "${clean(ctx.subject, 120)}" itself. The course only tells you which programme of that subject applies (for example, Português in a vocational course follows the vocational Português modules); never plan topics of other subjects of the course.
+- Plan ONLY topics of this subject itself. The course only tells you which programme of that subject applies; never plan topics of other subjects of the course.
 - Follow the official Portuguese curriculum (Aprendizagens Essenciais / programa do Ministério da Educação) for exactly this subject, year and course: real domains, units and topics a teacher would teach that year, never content from other years.
-- Write in ${languageName(ctx.language)}.
-- "title": the topic, short and specific (max 42 characters), e.g. "Sintaxe: funções sintáticas" or "Movimentos e forças", never "Lição 1" or "Unidade 1".
+- Write in ${target ? languageName(target) + ' (it is a foreign-language class)' : languageName(ctx.language)}.
+- "title": the topic, short and specific (max 42 characters), never "Lição 1" or "Unidade 1".
 - "description": one plain sentence (max 90 characters) saying what the student will practise.`,
-  }),
+    };
+  },
 };
 
 /** Only user/assistant turns of bounded size are accepted, never "system". */
@@ -282,29 +381,37 @@ export function createCodevantumAiHandler({ getKey = () => process.env.GROQ_API_
 
     const hasImages = messages.some((m) => m.images && m.images.length);
     const model = hasImages ? CODEVANTUM_MODELS.vision : prompt.model;
-    const isGptOss = model.startsWith('openai/');
     const stream = Boolean(body.stream) && !prompt.json;
     const controller = new AbortController();
     const onClose = () => { if (!res.writableEnded) controller.abort(); };
     res.on('close', onClose);
-    const timeout = setTimeout(() => controller.abort(), prompt.json ? 60000 : 45000);
+    const timeout = setTimeout(() => controller.abort(), prompt.json ? 55000 : 45000);
 
-    try {
-      const upstream = await fetchImpl(GROQ_URL, {
+    const call = (useModel) => {
+      const oss = useModel.startsWith('openai/');
+      return fetchImpl(GROQ_URL, {
         method: 'POST',
         headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model,
+          model: useModel,
           messages: [{ role: 'system', content: prompt.system + (hasImages ? '\nThe student attached a photo (often of an exercise or a page): read it carefully and help with it.' : '') }, ...messages.map(toProvider)],
           temperature: prompt.temperature,
           max_completion_tokens: prompt.maxTokens,
-          ...(isGptOss ? { reasoning_effort: 'low', include_reasoning: false } : { reasoning_format: 'hidden' }),
+          ...(oss ? { reasoning_effort: 'low', include_reasoning: false } : { reasoning_format: 'hidden' }),
           ...(prompt.json && { response_format: { type: 'json_object' } }),
           ...(stream && { stream: true }),
         }),
         signal: controller.signal,
       });
+    };
 
+    try {
+      let upstream = await call(model);
+      // The big model hits Groq's rate limits first: fall back to the fast one.
+      if (!upstream.ok && model === CODEVANTUM_MODELS.smart && !stream) {
+        console.warn('[codevantum-ai] smart model failed with', upstream.status, '- retrying with the fast model');
+        upstream = await call(CODEVANTUM_MODELS.fast);
+      }
       if (upstream.status === 429) return sendJson(res, 429, { error: 'O Mivvi está muito ocupado agora. Tenta daqui a pouco.' });
       if (!upstream.ok) {
         console.error('[codevantum-ai] Groq error', upstream.status, (await upstream.text()).slice(0, 300));

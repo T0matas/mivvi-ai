@@ -12,7 +12,7 @@ export interface PlannedLesson {
 }
 
 export const PLAN_LENGTH = 20
-const KEY = (subject: string, year: string, course?: string | null) => `mivvi_plan_v1_${subject}_${year}_${course || '-'}`
+const KEY = (subject: string, year: string, course?: string | null) => `mivvi_plan_v2_${subject}_${year}_${course || '-'}`
 const inFlight = new Map<string, Promise<PlannedLesson[] | null>>()
 
 export function getCachedPlan(subject: string, year?: string | null, course?: string | null): PlannedLesson[] | null {
@@ -37,6 +37,7 @@ export function fetchPlan(subject: string, year: string, course?: string | null)
     mode: 'plan',
     context: {
       subject: subjectName(subject),
+      subjectId: subject,
       schoolYear: `${n}.º ano (${n <= 9 ? 'Ensino Básico' : 'Ensino Secundário'}, Portugal)`,
       course: courseInfo(course)?.name,
       count: PLAN_LENGTH,

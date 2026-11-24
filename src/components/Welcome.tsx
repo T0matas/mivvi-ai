@@ -20,7 +20,7 @@ interface WelcomeProps {
 const RING = ['matematica', 'portugues', 'fq_a', 'historia', 'ingles', 'biologia', 'geografia', 'tic']
 
 export default function Welcome({ onStart }: WelcomeProps) {
-  const [view, setView] = useState<'welcome' | 'login' | 'signup'>('welcome')
+  const [view, setView] = useState<'welcome' | 'login'>('welcome')
   const rise = (d: number) => ({ animation: `wlIn .55s cubic-bezier(.22,1,.36,1) ${d}s both` })
   const btn = { height: 50, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 1, px: 3, border: 0, borderRadius: 999, font: 'inherit', fontSize: 15, fontWeight: 600, cursor: 'pointer', transition: 'background-color .15s, transform .15s', '&:active': { transform: 'scale(.98)' } }
 
@@ -67,7 +67,7 @@ export default function Welcome({ onStart }: WelcomeProps) {
               Estuda o programa do teu ano com um tutor que te explica tudo, ao teu ritmo.
             </Typography>
             <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 1, mt: 3.5, ...rise(0.22) }}>
-              <Box component="button" onClick={() => { soundManager.playStart(); setView('signup') }} sx={{ ...btn, bgcolor: '#fff', color: '#0d0d0d', '&:hover': { bgcolor: '#e6e6e6' } }}>
+              <Box component="button" onClick={() => { soundManager.playStart(); onStart() }} sx={{ ...btn, bgcolor: '#fff', color: '#0d0d0d', '&:hover': { bgcolor: '#e6e6e6' } }}>
                 Começar <ArrowForward sx={{ fontSize: 19 }} />
               </Box>
               <Box component="button" onClick={() => { soundManager.playSelect(); setView('login') }} sx={{ ...btn, bgcolor: 'transparent', color: cv.text, boxShadow: `inset 0 0 0 1px ${cv.borderStrong}`, '&:hover': { bgcolor: 'rgba(255,255,255,.05)' } }}>
@@ -86,20 +86,14 @@ export default function Welcome({ onStart }: WelcomeProps) {
           </Box>
         ) : (
           <Box key="login" sx={{ width: '100%', maxWidth: 380, display: 'grid', justifyItems: 'center', mt: 3, ...rise(0) }}>
-            <Typography component="h1" sx={{ fontFamily: cv.display, fontSize: 30, fontWeight: 700, letterSpacing: '-0.03em' }}>{view === 'signup' ? 'Cria a tua conta' : 'Bem-vindo de volta'}</Typography>
-            <Typography sx={{ color: cv.muted, fontSize: 15, mt: 0.75, mb: 3 }}>{view === 'signup' ? 'Guarda o teu progresso e continua em qualquer dispositivo.' : 'Entra para continuares onde ficaste.'}</Typography>
+            <Typography component="h1" sx={{ fontFamily: cv.display, fontSize: 30, fontWeight: 700, letterSpacing: '-0.03em' }}>Bem-vindo de volta</Typography>
+            <Typography sx={{ color: cv.muted, fontSize: 15, mt: 0.75, mb: 3 }}>Entra com a tua conta Google para continuares onde ficaste.</Typography>
             <Box sx={{ width: '100%', p: 2.5, borderRadius: '24px', bgcolor: cv.paper, boxShadow: `inset 0 0 0 1px ${cv.border}` }}>
               <LoginButtons onSuccess={() => { soundManager.playSuccess(); onStart() }} onError={() => soundManager.playError()} language="pt-PT" />
             </Box>
-            {view === 'signup' ? (
-              <Box component="button" onClick={() => { soundManager.playClick(); onStart() }} sx={{ mt: 2.5, border: 0, bgcolor: 'transparent', color: cv.muted, font: 'inherit', fontSize: 14, fontWeight: 600, cursor: 'pointer', '&:hover': { color: cv.text } }}>
-                Continuar sem conta
-              </Box>
-            ) : (
-              <Box component="button" onClick={() => { soundManager.playClick(); setView('signup') }} sx={{ mt: 2.5, border: 0, bgcolor: 'transparent', color: cv.muted, font: 'inherit', fontSize: 14, fontWeight: 600, cursor: 'pointer', '&:hover': { color: cv.text } }}>
-                Ainda não tens conta? <Box component="span" sx={{ color: cv.text }}>Criar conta</Box>
-              </Box>
-            )}
+            <Box component="button" onClick={() => { soundManager.playClick(); onStart() }} sx={{ mt: 2.5, border: 0, bgcolor: 'transparent', color: cv.muted, font: 'inherit', fontSize: 14, fontWeight: 600, cursor: 'pointer', '&:hover': { color: cv.text } }}>
+              Ainda não tens conta? <Box component="span" sx={{ color: cv.text }}>Começar</Box>
+            </Box>
           </Box>
         )}
       </Box>
