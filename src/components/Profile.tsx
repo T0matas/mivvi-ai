@@ -1,5 +1,5 @@
 import { Box, Typography, Dialog, DialogContent, TextField, DialogActions, Button } from '@mui/material'
-import { EditOutlined, LocalFireDepartmentRounded, SchoolRounded, PersonAddAlt1Outlined, TuneRounded, QrCode2Rounded } from '@mui/icons-material'
+import { EditOutlined, SchoolRounded, PersonAddAlt1Outlined, TuneRounded, QrCode2Rounded } from '@mui/icons-material'
 import { SubjectTile } from './SubjectDoodle'
 import { subjectName, yearLabel as ptYearLabel, courseInfo } from '../data/ptCurriculum'
 import SubjectPicker from './SubjectPicker'
@@ -47,7 +47,6 @@ export default function Profile({ userProfile, userProgress, onUpdateProfile, me
 
     // Stats Data
     const stats = [
-        { label: t('streak', lang), value: userProgress.streak, icon: <LocalFireDepartmentRounded />, color: '#ff9f88' },
         { label: t('lessons', lang), value: userProgress.completedLessons.length, icon: <SchoolRounded />, color: cv.mint },
     ]
 
@@ -126,7 +125,7 @@ export default function Profile({ userProfile, userProgress, onUpdateProfile, me
             </Box>
 
             {/* Stats */}
-            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1.25, mt: 1.25 }}>
+            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr', gap: 1.25, mt: 1.25 }}>
                 {stats.map((st, i) => (
                     <Box key={st.label} sx={{ ...card, borderRadius: '20px', p: 2, ...rise(0.05 + i * 0.04) }}>
                         <Box sx={{ width: 36, height: 36, borderRadius: '11px', bgcolor: st.color, color: '#1d2742', display: 'grid', placeItems: 'center', '& svg': { fontSize: 20 } }}>{st.icon}</Box>

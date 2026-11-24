@@ -92,8 +92,15 @@ export default function Lesson({ lessonId, onComplete, onMistake, onBack, userPr
 
   // The Mivvi AI panel beside the lesson (a sheet on smaller screens).
   const narrow = useMediaQuery('(max-width: 999px)')
-  const [aiOpen, setAiOpen] = useState(() => typeof window !== 'undefined' && window.innerWidth >= 1000)
+  // Start closed on every screen. The student can open Mivvi from the button.
+  const [aiOpen, setAiOpen] = useState(false)
   const inset = !narrow && aiOpen ? PANEL_WIDTH + 20 : 0
+
+  // Starting the exercises always returns the lesson to its focused layout,
+  // even if Mivvi was opened while reading the explanation.
+  useEffect(() => {
+    if (phase === 'quiz') setAiOpen(false)
+  }, [phase])
 
   const exercise = exercises[index]
   const kind: keyof typeof KIND = exercise

@@ -1,9 +1,8 @@
-import { AppBar, Toolbar, Box, Typography, styled, Popover, Dialog } from '@mui/material';
+import { AppBar, Toolbar, Box, Typography, Popover, Dialog } from '@mui/material';
 import { signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { auth } from '../firebase';
 import { yearLabel, courseInfo } from '../data/ptCurriculum';
 import { useEffect, useState } from 'react';
-import { LocalFireDepartment } from '@mui/icons-material';
 import { UserProgress, UserProfile } from '../types';
 import { useNavigate } from 'react-router-dom';
 import { soundManager } from '../utils/soundEffects';
@@ -21,28 +20,8 @@ interface TopBarProps {
     onHome?: () => void;
 }
 
-const StatBox = styled('button')(() => ({
-    border: 0,
-    background: 'none',
-    font: 'inherit',
-    display: 'flex',
-    alignItems: 'center',
-    padding: '4px 12px', // More compact
-    borderRadius: '50px', // Full pill
-    gap: '4px',
-    fontWeight: 500,
-    fontSize: '0.9rem',
-    fontVariantNumeric: 'tabular-nums',
-    cursor: 'pointer',
-    transition: 'all 0.2s',
-    '&:hover': {
-        backgroundColor: cv.surface
-    }
-}));
-
-export default function TopBar({ userProgress, userProfile, onOpenProfile, onOpenAccount, onHome }: TopBarProps) {
+export default function TopBar({ userProfile, onOpenProfile, onOpenAccount, onHome }: TopBarProps) {
     const navigate = useNavigate();
-    const [info, setInfo] = useState<{ el: HTMLElement; kind: 'streak' } | null>(null);
     const [menu, setMenu] = useState<HTMLElement | null>(null);
     const [confirmOut, setConfirmOut] = useState(false);
     const [account, setAccount] = useState<User | null>(auth.currentUser);
@@ -84,23 +63,6 @@ export default function TopBar({ userProgress, userProfile, onOpenProfile, onOpe
 
                 <Box sx={{ flex: 1 }} />
 
-                {/* Stats (Right) */}
-                <Box id="tutorial-stats" sx={{ display: 'flex', gap: { xs: 0.5, sm: 2 } }}>
-                    
-
-                    <StatBox id="tutorial-streak" aria-label="Lições perfeitas seguidas" onClick={(e) => { soundManager.playClick(); setInfo({ el: e.currentTarget, kind: 'streak' }); }} sx={{
-                        color: cv.butter,
-                        padding: { xs: '2px 6px', sm: '6px 12px' },
-                        gap: { xs: '4px', sm: '6px' }
-                    }}>
-                        <LocalFireDepartment sx={{ fontSize: { xs: 16, sm: 18 } }} />
-                        <Typography variant="subtitle1" fontWeight={500} sx={{ fontSize: { xs: '0.8rem', sm: '0.9rem' }, color: cv.text }}>
-                            {userProgress.streak}
-                        </Typography>
-                    </StatBox>
-
-                    
-                </Box>
                 <Box
                     component="button"
                     type="button"
@@ -139,13 +101,6 @@ export default function TopBar({ userProgress, userProfile, onOpenProfile, onOpe
                     </Box>
                 </Dialog>
 
-                <Popover open={!!info} anchorEl={info?.el} onClose={() => setInfo(null)} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }} transformOrigin={{ vertical: 'top', horizontal: 'center' }}
-                    PaperProps={{ sx: { mt: 1, p: 2, width: 240, bgcolor: '#222', borderRadius: '18px', color: cv.text, textAlign: 'left' } }}>
-                        <>
-                            <Typography sx={{ fontSize: 15, fontWeight: 700 }}>{userProgress.streak} {userProgress.streak === 1 ? 'lição perfeita' : 'lições perfeitas'} seguidas</Typography>
-                            <Typography sx={{ fontSize: 13, color: cv.muted, mt: 0.75 }}>A sequência cresce cada vez que acabas uma lição sem erros, e volta a zero quando falhas.</Typography>
-                        </>
-                </Popover>
             </Toolbar>
             
         </AppBar>

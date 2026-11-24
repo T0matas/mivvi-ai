@@ -97,12 +97,11 @@ export default function LessonTheoryView({ theory, subject, lessonNumber, ready,
         <Box sx={{ maxWidth: 760, mx: 'auto', height: 52, px: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
           <IconButton onClick={() => { soundManager.playBack(); onClose() }} aria-label="Fechar" sx={{ width: 36, height: 36 }}><Close sx={{ fontSize: 19 }} /></IconButton>
           <Typography sx={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{theory.title}</Typography>
-          <Typography sx={{ fontSize: 12.5, color: cv.muted, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', display: { xs: extra ? 'none' : 'block', sm: 'block' } }}>{read}% lido</Typography>
-          {extra}
           <Box component="button" onClick={(e: React.MouseEvent<HTMLElement>) => { soundManager.playClick(); setIndex(e.currentTarget) }}
             sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, height: 32, px: 1.25, border: 0, borderRadius: 999, bgcolor: 'transparent', color: cv.text, font: 'inherit', fontSize: 13, fontWeight: 600, cursor: 'pointer', '&:hover': { bgcolor: cv.soft } }}>
             <FormatListBulletedRounded sx={{ fontSize: 17 }} />Índice
           </Box>
+          {extra}
         </Box>
         <Box sx={{ position: 'absolute', left: 0, bottom: -1, height: 2, width: `${read}%`, bgcolor: color, transition: 'width .15s linear' }} />
       </Box>

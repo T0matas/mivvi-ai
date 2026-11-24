@@ -1,6 +1,6 @@
 import { Box, Typography } from '@mui/material'
 import { useMemo, useState } from 'react'
-import { Add, ArrowForward, LocalFireDepartment, LockOutlined, Search, ExpandMore } from '@mui/icons-material'
+import { Add, ArrowForward, LockOutlined, Search, ExpandMore } from '@mui/icons-material'
 import { Subject, UserProfile, UserProgress } from '../types'
 import { getLessonsBySubject } from '../services/lessonService'
 import { useLessonPlan } from '../services/lessonPlan'
@@ -12,7 +12,7 @@ import { cv } from '../theme'
 
 // Mivvi's home: a greeting, one big "carry on" card for the subject in focus
 // (its lesson titles come from the AI plan for the student's year and course),
-// today's goal and streak, and the subjects. With many subjects, the most
+// and the subjects. With many subjects, the most
 // recent ones come first and the rest open on demand, with a search.
 
 interface SubjectHomeProps {
@@ -41,7 +41,6 @@ const shimmerText = {
     WebkitBackgroundClip: 'text', backgroundClip: 'text', animation: 'homeShimmer 2.2s linear infinite',
     '@keyframes homeShimmer': { from: { backgroundPosition: '100% 0' }, to: { backgroundPosition: '0% 0' } },
 }
-const chipSx = { display: 'inline-flex', alignItems: 'center', gap: 0.75, height: 34, px: 1.25, borderRadius: 999, bgcolor: cv.paper, boxShadow: `inset 0 0 0 1px ${cv.border}`, fontSize: 13, fontWeight: 600, color: cv.text, fontVariantNumeric: 'tabular-nums' as const, whiteSpace: 'nowrap' as const }
 const rise = (delay = 0) => ({ animation: `homeIn .45s cubic-bezier(.22,1,.36,1) ${delay}s both`, '@keyframes homeIn': { from: { opacity: 0, transform: 'translateY(12px)' } } })
 
 export default function SubjectHome({ userProfile, userProgress, currentSubject, onSelectSubject, onOpenSubject, onAddSubject }: SubjectHomeProps) {
@@ -87,7 +86,7 @@ export default function SubjectHome({ userProfile, userProgress, currentSubject,
 
     return (
         <Box component="main" sx={{ maxWidth: 880, mx: 'auto', px: { xs: 2, sm: 3 }, pt: { xs: 2.5, sm: 4 }, pb: 4, boxSizing: 'border-box', textAlign: 'left', color: cv.text }}>
-            {/* Greeting, with today's goal and streak as two small chips */}
+            {/* Greeting */}
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap', ...rise() }}>
                 <Mascot size={48} mood="happy" />
                 <Box sx={{ flex: 1, minWidth: 180 }}>
@@ -97,11 +96,6 @@ export default function SubjectHome({ userProfile, userProgress, currentSubject,
                     <Typography sx={{ color: cv.muted, fontSize: 14 }}>
                         Bora aprender um bocadinho hoje?
                     </Typography>
-                </Box>
-                <Box sx={{ display: 'flex', gap: 0.75 }}>
-                    <Box title="Lições seguidas sem erros" sx={{ ...chipSx, color: userProgress.streak ? cv.butter : cv.muted }}>
-                        <LocalFireDepartment sx={{ fontSize: 17 }} />{userProgress.streak}
-                    </Box>
                 </Box>
             </Box>
 

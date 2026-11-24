@@ -53,26 +53,6 @@ const introSteps: TutorialStep[] = [
         hideNext: false,
         btnKey: "btn_next"
     },
-    // Step 2: Streak
-    {
-        id: 'streak',
-        targetId: 'tutorial-streak',
-        titleKey: "streak_title",
-        descKey: "streak_desc",
-        placement: 'bottom',
-        hideNext: false,
-        btnKey: "btn_next"
-    },
-    // Step 3: XP
-    {
-        id: 'xp',
-        targetId: 'tutorial-xp',
-        titleKey: "xp_title",
-        descKey: "xp_desc",
-        placement: 'bottom',
-        hideNext: false,
-        btnKey: "btn_next"
-    },
     // Step 4: Gems
     {
         id: 'gems',
