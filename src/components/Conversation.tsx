@@ -2,13 +2,13 @@ import { Fragment, useEffect, useRef, useState } from 'react'
 import { Box, Typography, IconButton, CircularProgress, Dialog } from '@mui/material'
 import {
   ArrowBack, SendRounded, AttachFileRounded, MicRounded, DeleteOutlineRounded, CallRounded, VideocamRounded,
-  PlayArrowRounded, PauseRounded, EditRounded, ContentCopyRounded, MoreHorizRounded, CheckRounded, InsertDriveFileRounded, DownloadRounded, CallMadeRounded, CallReceivedRounded, PhoneMissedRounded, Close,
+  PlayArrowRounded, PauseRounded, BlockRounded, EditRounded, ContentCopyRounded, MoreHorizRounded, CheckRounded, InsertDriveFileRounded, DownloadRounded, CallMadeRounded, CallReceivedRounded, PhoneMissedRounded, Close,
 } from '@mui/icons-material'
 import { ChatMessage, ChatSummary, PublicProfile, isOnline, markRead, receiptOf, editMessage, deleteMessage, pairId, sendMessage, subscribeMessages, loadFile, pingTyping, stopTyping, MAX_FILE_BYTES } from '../services/social'
 import { FriendView } from '../services/useSocial'
 import { Avatar } from './Friends'
 import { useCalls } from './CallProvider'
-import ReceiptIcon, { RECEIPT_LABEL } from './Receipt'
+import { SeenLine } from './Receipt'
 import { yearLabel } from '../data/ptCurriculum'
 import { soundManager } from '../utils/soundEffects'
 import { cv } from '../theme'
@@ -264,11 +264,10 @@ export default function Conversation({ me, friend, chat, mobile, onBack }: { me:
                       <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1 }}>
                         <Typography sx={{ fontSize: 14, fontWeight: 700 }}>{mine ? 'Tu' : friend.name}</Typography>
                         <Typography sx={{ fontSize: 11.5, color: cv.faint }}>{time(m.at)}</Typography>
-                        {mine && <ReceiptIcon state={receiptOf(m, chat, friend.uid)} size={14} />}
                       </Box>
                     )}
                     {m.deleted ? (
-                      <Typography sx={{ fontSize: 14, fontStyle: 'italic', color: cv.faint }}>🚫 {mine ? 'Apagaste esta mensagem' : 'Esta mensagem foi apagada'}</Typography>
+                      <Typography sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, fontSize: 14, fontStyle: 'italic', color: cv.faint }}><BlockRounded sx={{ fontSize: 15 }} />{mine ? 'Apagaste esta mensagem' : 'Esta mensagem foi apagada'}</Typography>
                     ) : editing?.id === m.id ? (
                       <Box sx={{ mt: 0.5 }} onClick={(e) => e.stopPropagation()}>
                         <Box component="textarea" autoFocus value={editing.text} rows={Math.min(6, editing.text.split('\n').length + 1)}
@@ -289,17 +288,11 @@ export default function Conversation({ me, friend, chat, mobile, onBack }: { me:
                       : m.kind === 'file' && m.fileId ? <FileMsg chatId={chatId} m={m} />
                         : m.kind === 'audio' && m.fileId ? <AudioMsg chatId={chatId} m={m} mine={mine} />
                           : <Typography sx={{ fontSize: 14.5, lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: m.pending ? cv.muted : '#e4e4e7' }}>
-                              {m.text}{m.edited && <Box component="span" sx={{ ml: 0.75, fontSize: 11.5, color: cv.faint }}>(editada)</Box>}{mine && grouped && <Box component="span" sx={{ ml: 0.75 }}><ReceiptIcon state={receiptOf(m, chat, friend.uid)} size={13} /></Box>}
+                              {m.text}{m.edited && <Box component="span" sx={{ ml: 0.75, fontSize: 11.5, color: cv.faint }}>(editada)</Box>}
                             </Typography>}
-                    {m === lastMine && lastIsMine && (() => {
-                      const r = receiptOf(m, chat, friend.uid)
-                      return (
-                        <Typography sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5, fontSize: 11.5, color: r === 'seen' ? cv.accent : cv.faint }}>
-                          <ReceiptIcon state={r} size={13} />
-                          {r === 'seen' && chat?.reads?.[friend.uid] ? `Vista às ${time(chat.reads[friend.uid])}` : RECEIPT_LABEL[r]}
-                        </Typography>
-                      )
-                    })()}
+                    {m === lastMine && lastIsMine && (
+                      <SeenLine state={receiptOf(m, chat, friend.uid)} at={chat?.reads?.[friend.uid] ? time(chat.reads[friend.uid]) : undefined} friend={{ name: friend.name, photo: friend.profile?.photo }} />
+                    )}
                   </Box>
                 </Box>
               )}
