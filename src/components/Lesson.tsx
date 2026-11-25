@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Box, Typography, IconButton, CircularProgress, useMediaQuery } from '@mui/material'
-import { Close, Check, VolumeUp, Replay, ArrowForward, AutoStoriesOutlined } from '@mui/icons-material'
+import { Close, Check, VolumeUp, Replay, ArrowForward, AutoStoriesOutlined, LightbulbOutlined } from '@mui/icons-material'
 
 import { Exercise, AIResponse, UserProfile, LessonTheory } from '../types'
 import { generateTheory, generateLessonExercises, getAIFeedback, checkTypedAnswer, normalizeAnswer, LessonRequest } from '../services/aiService'
@@ -175,8 +175,11 @@ export default function Lesson({ lessonId, onComplete, onMistake, onBack, userPr
       onMistake?.()
       setRetryQueue((prev) => [...prev, exercise])
     }
-    setAiFeedback(await getAIFeedback(exercise, correct, lang, answer, subject))
-  }, [exercise, answered, checking, answer, hasOptions, index, lang, onMistake, subject])
+    setAiFeedback(await getAIFeedback(exercise, correct, lang, answer, subject, {
+      schoolYear: userProfile?.schoolYear,
+      summary: theory ? [theory.intro, ...theory.keyPoints].join(' ').slice(0, 600) : undefined,
+    }))
+  }, [exercise, answered, checking, answer, hasOptions, index, lang, onMistake, subject, userProfile?.schoolYear, theory])
 
   const handleFinishLesson = () => {
     const right = score.correct
@@ -484,27 +487,39 @@ export default function Lesson({ lessonId, onComplete, onMistake, onBack, userPr
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
                   <Mascot size={34} mood={outcome === 'right' ? 'happy' : 'sad'} outfit={currentOutfit} animated={false} />
                   <Typography sx={{ flex: 1, fontFamily: cv.display, fontSize: 17, fontWeight: 700, color: tone }}>
-                    {aiFeedback?.feedback && aiFeedback.feedback.length < 28 ? aiFeedback.feedback : outcome === 'right' ? 'Muito bem!' : 'Ainda não'}
+                    {outcome === 'wrong' ? 'Vamos perceber o erro' : aiFeedback?.feedback && aiFeedback.feedback.length < 28 ? aiFeedback.feedback : 'Muito bem!'}
                   </Typography>
                   <Box sx={{ width: 26, height: 26, borderRadius: '50%', bgcolor: tone, color: '#0d0d0d', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
                     {outcome === 'right' ? <Check sx={{ fontSize: 16 }} /> : <Close sx={{ fontSize: 16 }} />}
                   </Box>
                 </Box>
 
-                {(outcome === 'wrong' || acceptedSimilar) && (
-                  <Box sx={{ mt: 1.25, display: 'flex', alignItems: 'center', gap: 1, p: '8px 10px', borderRadius: '12px', bgcolor: 'rgba(125,219,168,.08)' }}>
-                    <Check sx={{ fontSize: 16, color: cv.green }} />
-                    <Typography sx={{ fontSize: 13.5 }}><Box component="span" sx={{ color: cv.muted }}>{acceptedSimilar ? 'Também se diz: ' : 'Resposta certa: '}</Box><strong>{exercise.correctAnswer}</strong></Typography>
-                  </Box>
-                )}
-
                 <Box sx={{ mt: 1.25, minHeight: 20 }}>
                   {aiFeedback ? (
-                    <Typography sx={{ fontSize: 14, color: '#d4d4d8', lineHeight: 1.5, animation: 'lsUp .3s ease both' }}>{aiFeedback.explanation}</Typography>
+                    <>
+                      <Typography sx={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: cv.muted, mb: 0.5 }}>
+                        {outcome === 'wrong' ? 'O que rever' : 'Porque está certa'}
+                      </Typography>
+                      <Typography sx={{ fontSize: 14, color: '#d4d4d8', lineHeight: 1.5, animation: 'lsUp .3s ease both' }}>{aiFeedback.explanation}</Typography>
+                      {aiFeedback.encouragement && <Typography sx={{ fontSize: 12.5, color: cv.muted, lineHeight: 1.45, mt: 0.75 }}>{aiFeedback.encouragement}</Typography>}
+                    </>
                   ) : (
-                    <Typography sx={{ fontSize: 13, ...shimmer }}>O Mivvi está a escrever uma explicação…</Typography>
+                    <Typography sx={{ fontSize: 13, ...shimmer }}>O Mivvi está a preparar uma explicação…</Typography>
                   )}
                 </Box>
+
+                {outcome === 'wrong' && (
+                  <Box sx={{ mt: 1.25, display: 'flex', alignItems: 'flex-start', gap: 1, p: '9px 11px', borderRadius: '12px', bgcolor: 'rgba(159,201,255,.08)', boxShadow: 'inset 0 0 0 1px rgba(159,201,255,.14)' }}>
+                    <LightbulbOutlined sx={{ fontSize: 17, color: cv.accent, mt: '1px' }} />
+                    <Typography sx={{ fontSize: 13.5, lineHeight: 1.45 }}><Box component="span" sx={{ color: cv.muted }}>Resposta certa: </Box><strong>{exercise.correctAnswer}</strong></Typography>
+                  </Box>
+                )}
+                {acceptedSimilar && (
+                  <Box sx={{ mt: 1.25, display: 'flex', alignItems: 'flex-start', gap: 1, p: '9px 11px', borderRadius: '12px', bgcolor: 'rgba(125,219,168,.08)' }}>
+                    <Check sx={{ fontSize: 16, color: cv.green, mt: '1px' }} />
+                    <Typography sx={{ fontSize: 13.5, lineHeight: 1.45 }}>A tua resposta também está certa. A forma habitual é <strong>{exercise.correctAnswer}</strong>.</Typography>
+                  </Box>
+                )}
 
                 <Box component="button" onClick={handleNext} sx={{ ...pillPrimary, width: '100%', height: 44, mt: 1.5 }}>
                   {isLast ? 'Terminar' : 'Continuar'}<ArrowForward sx={{ fontSize: 17 }} />

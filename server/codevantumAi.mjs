@@ -99,16 +99,22 @@ Rules:
 
   feedback: (ctx) => ({
     model: CODEVANTUM_MODELS.fast,
-    maxTokens: 700,
-    temperature: 0.6,
+    maxTokens: 900,
+    temperature: 0.35,
     json: true,
     system: `You are Mivvi, the mascot and AI tutor of the Mivvi learning app (built on Codevantum AI).
-A student just answered an exercise. Reply in ${languageName(contentLanguage(ctx) || ctx.language)} (simple words a student of this year understands) with a JSON object:
-{"feedback": "a 1-3 word reaction", "explanation": "one or two short sentences on why the answer is right or wrong", "encouragement": "one short, warm closing remark"}
-Tone: calm, friendly, encouraging. No emojis in "explanation". Return only the JSON object.`,
+The student is in ${clean(ctx.schoolYear, 40) || 'an unspecified school year'} and just answered an exercise in ${clean(ctx.subject, 80) || 'a school subject'}. Reply in ${languageName(contentLanguage(ctx) || ctx.language)} using simple words that suit this level. Return exactly this JSON shape:
+{"feedback": "a short heading, at most 4 words", "explanation": "2 or 3 short sentences explaining the answer", "encouragement": "one short, warm next step"}
+When the answer is wrong:
+- Explain what the student's actual answer misses or confuses, using the answer, options and question. Do not guess their intention; describe the difference in the ideas.
+- Then explain the right reasoning in a small step or two, grounded in the lesson summary, exercise explanation or hint supplied below.
+- Do not merely repeat the correct answer. The app shows it separately. If the supplied context is insufficient, say what clue in the question to look for instead of inventing a reason.
+When the answer is right, confirm the concept briefly. If their wording is an accepted equivalent, validate it and optionally show the standard wording.
+Keep the explanation to 2–3 concise sentences, calm and encouraging. No emojis in the explanation. Return only valid JSON.`,
     user: `Question: "${clean(ctx.question)}"
+${Array.isArray(ctx.options) && ctx.options.length ? `Options: ${ctx.options.map((option) => `"${clean(option, 100)}"`).join(' | ')}\n` : ''}
 Correct answer: "${clean(ctx.correctAnswer)}"
-${ctx.userAnswer ? `Student's answer: "${clean(ctx.userAnswer)}"\n` : ''}The student answered ${ctx.isCorrect ? 'correctly' : 'incorrectly'}.${ctx.isCorrect && ctx.userAnswer && clean(ctx.userAnswer).toLowerCase() !== clean(ctx.correctAnswer).toLowerCase() ? ' Their wording differs from the expected answer but means the same: accept it and, kindly, show the usual form.' : ''}`,
+${ctx.userAnswer ? `Student's answer: "${clean(ctx.userAnswer)}"\n` : ''}${ctx.lessonSummary ? `What the lesson taught: "${clean(ctx.lessonSummary)}"\n` : ''}${ctx.exerciseExplanation ? `Exercise explanation: "${clean(ctx.exerciseExplanation)}"\n` : ''}${ctx.hint ? `Hint for this exercise: "${clean(ctx.hint)}"\n` : ''}The student answered ${ctx.isCorrect ? 'correctly' : 'incorrectly'}.${ctx.isCorrect && ctx.userAnswer && clean(ctx.userAnswer).toLowerCase() !== clean(ctx.correctAnswer).toLowerCase() ? ' Their wording differs from the expected answer but means the same: accept it and, kindly, show the usual form.' : ''}`,
   }),
 
   exercises: (ctx) => {

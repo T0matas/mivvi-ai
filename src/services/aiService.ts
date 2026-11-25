@@ -271,14 +271,39 @@ export async function checkTypedAnswer(answer: string, exercise: Exercise): Prom
 
 // ── Feedback and tutor chat ─────────────────────────────────────────────────
 
-export async function getAIFeedback(exercise: Exercise, isCorrect: boolean, language = 'pt-PT', userAnswer?: string, subject?: string | null): Promise<AIResponse> {
+export async function getAIFeedback(
+  exercise: Exercise,
+  isCorrect: boolean,
+  language = 'pt-PT',
+  userAnswer?: string,
+  subject?: string | null,
+  lessonContext?: { schoolYear?: string | null; summary?: string },
+): Promise<AIResponse> {
+  const reasoning = exercise.explanation?.trim() || exercise.hint?.trim()
   const offline: AIResponse = isCorrect
-    ? { feedback: 'Muito bem!', explanation: `A resposta certa é "${exercise.correctAnswer}".`, encouragement: 'Continua assim!' }
-    : { feedback: 'Ainda não', explanation: `A resposta certa é "${exercise.correctAnswer}". ${exercise.hint || ''}`.trim(), encouragement: 'Vais conseguir na próxima.' };
+    ? { feedback: 'Muito bem!', explanation: reasoning || `A resposta certa é "${exercise.correctAnswer}".`, encouragement: 'Continua assim!' }
+    : {
+        feedback: 'Vamos rever',
+        explanation: reasoning || 'Volta à ideia principal da aula e identifica o que a pergunta está a pedir.',
+        encouragement: 'O erro ajuda-nos a perceber o que vale a pena rever.',
+      };
   try {
     const data = parseJson(await askKodu({
       mode: 'feedback',
-      context: { question: exercise.question, correctAnswer: exercise.correctAnswer, userAnswer, isCorrect, language, subjectId: subject || undefined },
+      context: {
+        question: exercise.question,
+        options: exercise.options,
+        correctAnswer: exercise.correctAnswer,
+        userAnswer,
+        isCorrect,
+        language,
+        subject: subject ? subjectName(subject) : undefined,
+        subjectId: subject || undefined,
+        schoolYear: lessonContext?.schoolYear || undefined,
+        lessonSummary: lessonContext?.summary,
+        hint: exercise.hint,
+        exerciseExplanation: exercise.explanation,
+      },
     }));
     return {
       feedback: data.feedback || offline.feedback,
