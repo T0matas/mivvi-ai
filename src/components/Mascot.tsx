@@ -16,6 +16,8 @@ interface MascotProps {
     outfit?: string
     /** Blinks and breathes gently. */
     animated?: boolean
+    /** Small eye movement used for cursor tracking. */
+    gaze?: { x: number; y: number }
     sx?: SxProps<Theme>
 }
 
@@ -111,7 +113,7 @@ export const ACCESSORIES = ['naked', 'scientist', 'artist', 'athlete', 'chef', '
 /** The wardrobe was removed, so saved outfits from before are not drawn. */
 const OUTFITS_ENABLED = false
 
-export default function Mascot({ size = 96, mood = 'idle', outfit: savedOutfit = 'naked', animated = true, sx }: MascotProps) {
+export default function Mascot({ size = 96, mood = 'idle', outfit: savedOutfit = 'naked', animated = true, gaze, sx }: MascotProps) {
     const outfit = OUTFITS_ENABLED ? savedOutfit : 'naked'
     const look = mood === 'thinking' ? { x: 3, y: -5 } : mood === 'sad' ? { x: 0, y: 5 } : { x: 0, y: 0 }
     const happy = mood === 'happy' || mood === 'celebrating'
@@ -130,7 +132,7 @@ export default function Mascot({ size = 96, mood = 'idle', outfit: savedOutfit =
                 transformOrigin: '50% 90%',
                 '@keyframes mascotBreathe': { '0%, 100%': { transform: 'scale(1)' }, '50%': { transform: 'scale(1.025, 0.985)' } },
                 '@keyframes mascotHop': { '0%, 100%': { transform: 'translateY(0)' }, '50%': { transform: 'translateY(-8%)' } },
-                '& .mascot-eyes': animated && !happy ? { animation: 'mascotBlink 5s infinite', transformOrigin: '50% 60%' } : {},
+                '& .mascot-eyes': animated && (!happy || gaze) ? { animation: 'mascotBlink 5s infinite', transformOrigin: '50% 60%' } : {},
                 '@keyframes mascotBlink': { '0%, 94%, 100%': { transform: 'scaleY(1)' }, '96%': { transform: 'scaleY(0.1)' } },
                 '@media (prefers-reduced-motion: reduce)': { animation: 'none', '& .mascot-eyes': { animation: 'none' } },
                 ...sx,
@@ -153,8 +155,9 @@ export default function Mascot({ size = 96, mood = 'idle', outfit: savedOutfit =
                 )}
                 {TOP[outfit]}
                 {outfit !== 'pirate' && FRONT[outfit]}
-                <g className="mascot-eyes" transform={`translate(${look.x} ${look.y})`}>
-                    {happy ? (
+                <g className="mascot-gaze" transform={`translate(${gaze?.x ?? look.x} ${gaze?.y ?? look.y})`}>
+                    <g className="mascot-eyes">
+                    {happy && !gaze ? (
                         <>
                             <path d="M33 60 Q38 52 43 60" stroke={covered ? '#fff' : EYE} strokeWidth="5" strokeLinecap="round" fill="none" />
                             <path d="M57 60 Q62 52 67 60" stroke={covered ? '#fff' : EYE} strokeWidth="5" strokeLinecap="round" fill="none" />
@@ -165,6 +168,7 @@ export default function Mascot({ size = 96, mood = 'idle', outfit: savedOutfit =
                             {outfit !== 'pirate' && <rect x="58" y="48" width="8" height="18" rx="4" fill={covered ? '#fff' : EYE} />}
                         </>
                     )}
+                    </g>
                 </g>
                 {outfit === 'pirate' && FRONT.pirate}
             </svg>

@@ -141,6 +141,7 @@ export default function AITutor({ userProfile, embedded = false, subject }: AITu
     const [seconds, setSeconds] = useState(0)
     const thread = useRef<HTMLDivElement>(null)
     const box = useRef<HTMLTextAreaElement>(null)
+    const welcomeMascot = useRef<HTMLDivElement>(null)
     const fileInput = useRef<HTMLInputElement>(null)
     const abort = useRef<AbortController | null>(null)
     const recorder = useRef<MediaRecorder | null>(null)
@@ -206,6 +207,30 @@ export default function AITutor({ userProfile, embedded = false, subject }: AITu
     const retry = () => {
         const history = messages.filter((m) => !m.error)
         if (history.length && history[history.length - 1].role === 'user') ask(history)
+    }
+
+    const followPointer = (event: React.PointerEvent<HTMLDivElement>) => {
+        const mascot = welcomeMascot.current
+        if (!mascot || event.pointerType === 'touch') return
+        const rect = mascot.getBoundingClientRect()
+        const x = Math.max(-1, Math.min(1, (event.clientX - (rect.left + rect.width / 2)) / (rect.width * 1.8)))
+        const y = Math.max(-1, Math.min(1, (event.clientY - (rect.top + rect.height / 2)) / (rect.height * 1.8)))
+        const eyes = mascot.querySelector<SVGGElement>('.mascot-gaze')
+        eyes?.setAttribute('transform', `translate(${Math.round(x * 3 * 2) / 2} ${Math.round(y * 2 * 2) / 2})`)
+    }
+
+    const followCaret = (textarea: HTMLTextAreaElement) => {
+        const lines = textarea.value.slice(0, textarea.selectionStart).split('\n')
+        const allLines = textarea.value.split('\n')
+        const charsPerLine = Math.max(1, Math.floor((textarea.clientWidth - 16) / ((Number.parseFloat(window.getComputedStyle(textarea).fontSize) || 15) * 0.52)))
+        const currentLine = lines[lines.length - 1]
+        const column = currentLine.length % charsPerLine
+        const wrappedLine = Math.floor(currentLine.length / charsPerLine)
+        const visualLine = lines.slice(0, -1).reduce((count, line) => count + Math.max(1, Math.ceil(line.length / charsPerLine)), 0) + wrappedLine
+        const totalLines = Math.max(1, allLines.reduce((count, line) => count + Math.max(1, Math.ceil(line.length / charsPerLine)), 0))
+        const x = Math.max(-3, Math.min(3, (column / charsPerLine) * 6 - 3))
+        const y = totalLines <= 1 ? 0 : Math.max(-1.5, Math.min(1.5, ((visualLine / (totalLines - 1)) * 2 - 1) * 1.5))
+        welcomeMascot.current?.querySelector<SVGGElement>('.mascot-gaze')?.setAttribute('transform', `translate(${x.toFixed(1)} ${y.toFixed(1)})`)
     }
 
     // ── Attachments ──────────────────────────────────────────────────────────
@@ -275,7 +300,7 @@ export default function AITutor({ userProfile, embedded = false, subject }: AITu
     const iconBtn = { width: 36, height: 36, flexShrink: 0, color: cv.muted, '&:hover': { color: cv.text, bgcolor: 'rgba(255,255,255,.06)' } }
 
     return (
-        <Box sx={{
+        <Box onPointerMove={messages.length === 0 ? followPointer : undefined} onPointerLeave={() => welcomeMascot.current?.querySelector<SVGGElement>('.mascot-gaze')?.setAttribute('transform', 'translate(0 0)')} sx={{
             position: 'fixed', left: 0, right: 0, top: embedded ? 'calc(57px + env(safe-area-inset-top, 0px))' : 0, bottom: 0,
             zIndex: embedded ? 5 : 1200, display: 'flex', flexDirection: 'column', bgcolor: cv.bg, color: cv.text, textAlign: 'left', fontFamily: cv.font,
             '& .mv-word': { display: 'inline', animation: 'mvWord .45s ease both' },
@@ -308,7 +333,7 @@ export default function AITutor({ userProfile, embedded = false, subject }: AITu
                 <Box sx={{ maxWidth: 780, mx: 'auto', p: 2, display: 'flex', flexDirection: 'column', gap: 2.75, minHeight: '100%', boxSizing: 'border-box' }}>
                     {messages.length === 0 ? (
                         <Box sx={{ m: 'auto', width: '100%', maxWidth: 560, display: 'grid', justifyItems: 'center', textAlign: 'center' }}>
-                            <Box sx={{ animation: 'mvIn .4s cubic-bezier(.22,1,.36,1) both' }}><Mascot size={88} mood="happy" /></Box>
+                            <Box ref={welcomeMascot} sx={{ animation: 'mvIn .4s cubic-bezier(.22,1,.36,1) both', '& .mascot-gaze': { transition: 'transform 120ms ease-out' }, '@media (prefers-reduced-motion: reduce)': { animation: 'none', '& .mascot-gaze': { transition: 'none' } } }}><Mascot size={88} mood="happy" gaze={{ x: 0, y: 0 }} animated={false} /></Box>
                             <Typography sx={{ fontFamily: cv.display, fontSize: 26, fontWeight: 700, letterSpacing: '-0.025em', mt: 1.5, animation: 'mvIn .4s cubic-bezier(.22,1,.36,1) .05s both' }}>Olá, sou o Mivvi</Typography>
                             <Typography sx={{ color: cv.muted, fontSize: 15, mt: 0.5, maxWidth: 400, animation: 'mvIn .4s cubic-bezier(.22,1,.36,1) .1s both' }}>
                                 O teu tutor. Pergunta-me qualquer coisa, ou manda uma foto de um exercício.
@@ -403,7 +428,10 @@ export default function AITutor({ userProfile, embedded = false, subject }: AITu
                             </Box>
                         ) : (
                             <Box component="textarea" ref={box} rows={1} value={input}
-                                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setInput(e.target.value)}
+                                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => { setInput(e.target.value); followCaret(e.currentTarget) }}
+                                onKeyUp={(e: React.KeyboardEvent<HTMLTextAreaElement>) => followCaret(e.currentTarget)}
+                                onClick={(e: React.MouseEvent<HTMLTextAreaElement>) => followCaret(e.currentTarget)}
+                                onBlur={() => welcomeMascot.current?.querySelector<SVGGElement>('.mascot-gaze')?.setAttribute('transform', 'translate(0 0)')}
                                 onKeyDown={(e: React.KeyboardEvent<HTMLTextAreaElement>) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
                                 onPaste={(e: React.ClipboardEvent<HTMLTextAreaElement>) => { if (e.clipboardData.files.length) { e.preventDefault(); onFiles(e.clipboardData.files) } }}
                                 placeholder="Pergunta ao Mivvi…" aria-label="Pergunta ao Mivvi"
