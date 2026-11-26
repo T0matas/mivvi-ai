@@ -82,7 +82,8 @@ export function Diagram({ diagram, color }: { diagram: TheoryDiagram; color: str
 }
 
 /** The main picture of a Wikipedia article about the section's idea. */
-export function TopicImage({ query }: { query: string }) {
+/** `hideTitle`: in exams the article's name could give the answer away. */
+export function TopicImage({ query, hideTitle }: { query: string; hideTitle?: boolean }) {
   const img = useWikiImage(query)
   if (img === null) return null
   return (
@@ -100,10 +101,12 @@ export function TopicImage({ query }: { query: string }) {
       </Box>
       {img && (
         <Box component="figcaption" sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mt: 0.75, fontSize: 12, color: cv.faint }}>
-          <span>{img.title}</span>
-          <Box component="a" href={img.page} target="_blank" rel="noopener noreferrer" sx={{ ml: 'auto', display: 'inline-flex', alignItems: 'center', gap: 0.25, color: cv.faint, textDecoration: 'none', '&:hover': { color: cv.muted } }}>
-            Wikipédia <OpenInNewRounded sx={{ fontSize: 12 }} />
-          </Box>
+          <span>{hideTitle ? 'Imagem: Wikipédia' : img.title}</span>
+          {!hideTitle && (
+            <Box component="a" href={img.page} target="_blank" rel="noopener noreferrer" sx={{ ml: 'auto', display: 'inline-flex', alignItems: 'center', gap: 0.25, color: cv.faint, textDecoration: 'none', '&:hover': { color: cv.muted } }}>
+              Wikipédia <OpenInNewRounded sx={{ fontSize: 12 }} />
+            </Box>
+          )}
         </Box>
       )}
     </Box>

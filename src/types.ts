@@ -71,6 +71,8 @@ export interface Exercise {
   acceptedAnswers?: string[]
   /** Something to look at with the question (from the AI). */
   visual?: ExerciseVisual
+  /** A Wikipedia article whose main picture helps with the question (exam). */
+  image?: string
 }
 
 export interface Lesson {

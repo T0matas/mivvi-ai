@@ -7,6 +7,7 @@ import { getCachedPlan } from '../services/lessonPlan'
 import { subjectName, subjectColor, yearLabel } from '../data/ptCurriculum'
 import { SubjectTile } from './SubjectDoodle'
 import QuestionVisual from './QuestionVisual'
+import { TopicImage } from './TheoryBlocks'
 import ExitConfirmDialog from './ExitConfirmDialog'
 import Mascot from './Mascot'
 import { soundManager } from '../utils/soundEffects'
@@ -33,7 +34,7 @@ const canFullscreen = () => typeof document !== 'undefined' && !!document.fullsc
 
 export default function Exam({ subject, userProfile, previous, onRecord, onExit }: Props) {
   const color = subjectColor(subject)
-  const plan = getCachedPlan(subject, userProfile.schoolYear, userProfile.course) || []
+  const [plan, setPlan] = useState(() => getCachedPlan(subject, userProfile.schoolYear, userProfile.course) || [])
   const [phase, setPhase] = useState<Phase>('intro')
   const [questions, setQuestions] = useState<Exercise[] | null>(null)
   const [loadError, setLoadError] = useState(false)
@@ -54,7 +55,7 @@ export default function Exam({ subject, userProfile, previous, onRecord, onExit 
     setLoadError(false)
     setQuestions(null)
     generateExam(subject, userProfile.schoolYear || '1ano', userProfile.course, COUNT)
-      .then((q) => { setQuestions(q); setAnswers(q.map(() => '')); setLeft(q.length * SECONDS_PER_QUESTION) })
+      .then((q) => { setQuestions(q); setAnswers(q.map(() => '')); setLeft(q.length * SECONDS_PER_QUESTION); setPlan(getCachedPlan(subject, userProfile.schoolYear, userProfile.course) || []) })
       .catch(() => setLoadError(true))
   }, [subject, userProfile.schoolYear, userProfile.course])
   useEffect(() => { load() }, [load])
@@ -165,7 +166,7 @@ export default function Exam({ subject, userProfile, previous, onRecord, onExit 
           </Box>
           <Typography component="h1" sx={{ fontFamily: cv.display, fontSize: { xs: 28, sm: 34 }, fontWeight: 700, letterSpacing: '-0.03em', mt: 1.5 }}>Exame final</Typography>
           <Typography sx={{ color: cv.muted, fontSize: 15, mt: 0.75, lineHeight: 1.5 }}>
-            Mostra o que aprendeste nas {plan.length} lições do ano. As perguntas cobrem todas as matérias.
+            {plan.length ? `Mostra o que aprendeste nas ${plan.length} lições do ano.` : 'Mostra o que aprendeste este ano.'} As perguntas cobrem todas as matérias.
           </Typography>
 
           <Box sx={{ ...card, mt: 3, p: 2.25, display: 'grid', gap: 1.5 }}>
@@ -328,6 +329,7 @@ export default function Exam({ subject, userProfile, previous, onRecord, onExit 
       <Box key={index} sx={{ maxWidth: 640, mx: 'auto', px: 2.5, pt: 3, pb: 16, animation: 'exQ .25s ease both', '@keyframes exQ': { from: { opacity: 0, transform: 'translateY(6px)' } } }}>
         <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: cv.muted, textTransform: 'uppercase', letterSpacing: '.07em' }}>Pergunta {index + 1} de {questions.length}</Typography>
         <Typography sx={{ fontFamily: cv.display, fontSize: { xs: 19, sm: 22 }, fontWeight: 700, letterSpacing: '-0.015em', lineHeight: 1.35, mt: 1 }}>{q.question}</Typography>
+        {q.image && <TopicImage query={q.image} hideTitle />}
         {q.visual && <Box sx={{ mt: 2 }}><QuestionVisual visual={q.visual} subject={subject} /></Box>}
 
         {typing ? (

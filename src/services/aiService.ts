@@ -1,7 +1,7 @@
 import { Exercise, AIResponse, Subject, LessonTheory } from '../types';
 import { askKodu, streamKodu, KoduMessage } from './codevantumAI';
 import { subjectName, yearNumber, courseInfo, isMathSubject, isLanguageSubject } from '../data/ptCurriculum';
-import { getCachedPlan } from './lessonPlan';
+import { getCachedPlan, fetchPlan } from './lessonPlan';
 
 // The AI is Kodu, the Codevantum tutor (Groq gpt-oss), reached through this
 // app's server at /api/ai/chat. Each lesson has two parts written by the AI
@@ -118,6 +118,17 @@ const safeVisual = (visual: Exercise['visual'], answer: string): Exercise['visua
   }
 };
 
+/** A picture for the question only if it doesn't give the answer away (no word in common with it). */
+const imageThatHelps = (ex: any): string | undefined => {
+  if (typeof ex.image !== 'string' || !ex.image.trim()) return undefined
+  const SMALL = ['dos', 'das', 'com', 'por', 'para', 'uma', 'the', 'and', 'que']
+  const words = (t: string) => new Set(normalizeAnswer(t).split(/[\s,.;:()\-]+/).filter((w) => w.length >= 3 && !SMALL.includes(w)))
+  const img = words(ex.image)
+  const answers = [ex.correctAnswer, ...(Array.isArray(ex.acceptedAnswers) ? ex.acceptedAnswers : [])].map((a: any) => String(a || ''))
+  if (answers.some((a) => [...words(a)].some((w) => img.has(w)) || normalizeAnswer(ex.image) === normalizeAnswer(a))) return undefined
+  return ex.image.trim().slice(0, 100)
+}
+
 const normalizeExercise = (ex: any, index: number): Exercise => {
   const options = uniqueOptions(ex);
   const typing = ex.type === 'typing' || options.length < 2;
@@ -131,6 +142,7 @@ const normalizeExercise = (ex: any, index: number): Exercise => {
     exerciseType: ex.exerciseType === 'listening' && ex.audioText ? 'listening' : 'text',
     audioText: ex.audioText || undefined,
     hint: ex.hint ? String(ex.hint) : undefined,
+    image: imageThatHelps(ex),
     // A listening exercise must not show what the student is supposed to hear.
     visual: ex.exerciseType === 'listening' ? undefined : safeVisual(cleanVisual(ex.visual), String(ex.correctAnswer || '')),
   };
@@ -217,7 +229,8 @@ export function generateExercises(lessonId: number, difficulty: 'easy' | 'medium
 
 /** The final exam of a subject: questions over every topic of its plan. Throws when the AI can't write it. */
 export async function generateExam(subject: Subject, schoolYear: string, course?: string, count = 20): Promise<Exercise[]> {
-  const plan = getCachedPlan(subject, schoolYear, course) || []
+  // The exam covers the year's plan: make sure it exists first.
+  const plan = getCachedPlan(subject, schoolYear, course) || (await fetchPlan(subject, schoolYear, course)) || []
   const context = {
     subject: subjectName(subject),
     subjectId: subject,

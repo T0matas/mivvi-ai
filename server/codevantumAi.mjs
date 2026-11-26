@@ -203,10 +203,12 @@ ${topics.map((t, i) => `  ${i + 1}. ${t}`).join('\n')}
 Rules:
 1. About 70% "multiple-choice" (exactly 4 options, one correct, copied exactly into "correctAnswer") and 30% "typing" (one short, unambiguous answer, with every other valid form in "acceptedAnswers").
 2. No two questions about the same point. No listening or speaking.
-3. Never give away the answer in the question or in the visual.
+3. Never give away the answer in the question, the visual or the image.
 4. Each question under 160 characters.
+5. Help the student think with something to look at, like a real exam: give a "visual" to at least 14 of the questions (a text excerpt to read, an expression or equation with the unknown as ?, a small data table, a bar chart of data, or a list of items/events/word bank), always about that question's own content.
+6. Give about 6 questions an "image": the exact title of an existing Wikipedia article (in Portuguese when possible) whose main picture shows the CONTEXT of the question — a place, map, period, artwork, object or situation the student looks at to answer. The picture must NEVER show or name the answer: no word of the image title may appear in the correct answer. Example: question "Que navegador chegou à Índia por mar em 1498?" → image "Caravela" (context), never "Vasco da Gama" (the answer). Example: "Que sólido tem 6 faces quadradas?" → no image (any picture would give it away).
 
-Each item: {"type": "multiple-choice" | "typing", "question": "...", "correctAnswer": "...", "acceptedAnswers": [], "options": ["4 for multiple-choice, [] for typing"], "topic": "the topic number it tests", "visual": null or one of {"kind":"excerpt","text":"...","source":"..."} | {"kind":"formula","text":"..."} | {"kind":"table","headers":[],"rows":[[]]} | {"kind":"list","title":"...","items":[]}}`,
+Each item: {"type": "multiple-choice" | "typing", "question": "...", "correctAnswer": "...", "acceptedAnswers": [], "options": ["4 for multiple-choice, [] for typing"], "topic": "the topic number it tests", "image": "optional Wikipedia article title", "visual": null or one of {"kind":"excerpt","text":"max 300 chars","source":"..."} | {"kind":"formula","text":"..."} | {"kind":"table","headers":["2-4 columns"],"rows":[["2-5 rows"]]} | {"kind":"bars","title":"...","items":[{"label":"...","value":12}]} | {"kind":"list","title":"...","items":["2-5 items"]}}`,
     };
   },
 
