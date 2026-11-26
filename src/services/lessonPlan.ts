@@ -1,18 +1,23 @@
 import { useEffect, useState } from 'react'
-import { askKodu } from './codevantumAI'
+import { askKodu, KoduError } from './codevantumAI'
 import { courseInfo, subjectName, yearNumber } from '../data/ptCurriculum'
 
-// The year's lesson plan of a subject, written once by the AI from the
-// Portuguese curriculum (for that subject, year and course) and kept on this
-// device. The home screen shows its titles; each lesson uses its topic.
+// The year's lesson plan of a subject. The server reads the official document
+// (DGE Aprendizagens Essenciais for that subject and year, or the programme of
+// the professional course) and the AI turns it into lessons in the same order:
+// lesson 1 = the first content of the document. How many lessons there are
+// depends on the document. The plan is kept on this device.
 
 export interface PlannedLesson {
   title: string
   description: string
+  /** The learning objectives of the official document this lesson covers. */
+  content?: string
 }
 
-export const PLAN_LENGTH = 20
-const KEY = (subject: string, year: string, course?: string | null) => `mivvi_plan_v2_${subject}_${year}_${course || '-'}`
+/** Most lessons a plan can have (lesson ids keep the number in two digits). */
+export const MAX_LESSONS = 40
+const KEY = (subject: string, year: string, course?: string | null) => `mivvi_plan_v3_${subject}_${year}_${course || '-'}`
 const inFlight = new Map<string, Promise<PlannedLesson[] | null>>()
 
 export function getCachedPlan(subject: string, year?: string | null, course?: string | null): PlannedLesson[] | null {
@@ -33,24 +38,30 @@ export function fetchPlan(subject: string, year: string, course?: string | null)
   if (inFlight.has(key)) return inFlight.get(key)!
 
   const n = yearNumber(year)
-  const job = askKodu({
-    mode: 'plan',
-    context: {
+  // Planning sends the official document to the AI: when the AI is busy (429), wait and try again.
+  const ask = async (context: Record<string, unknown>) => {
+    for (const wait of [0, 8000, 20000]) {
+      if (wait) await new Promise((r) => setTimeout(r, wait))
+      try { return await askKodu({ mode: 'plan', context }) } catch (e) { if ((e as KoduError).status !== 429 || wait === 20000) throw e }
+    }
+    throw new Error('busy')
+  }
+  const job = ask({
       subject: subjectName(subject),
       subjectId: subject,
       schoolYear: `${n}.º ano (${n <= 9 ? 'Ensino Básico' : 'Ensino Secundário'}, Portugal)`,
       course: courseInfo(course)?.name,
-      count: PLAN_LENGTH,
+      courseId: course || undefined,
+      year: n,
       language: 'pt-PT',
-    },
   })
     .then((reply) => {
       const parsed = JSON.parse(reply.replace(/```json|```/g, '').trim())
       const lessons: PlannedLesson[] = (parsed.lessons || [])
         .filter((l: any) => l && typeof l.title === 'string' && l.title.trim())
-        .slice(0, PLAN_LENGTH)
-        .map((l: any) => ({ title: String(l.title).trim(), description: String(l.description || '').trim() }))
-      if (lessons.length < 5) return null
+        .slice(0, MAX_LESSONS)
+        .map((l: any) => ({ title: String(l.title).trim().slice(0, 60), description: String(l.description || '').trim().slice(0, 140), content: String(l.content || '').trim().slice(0, 400) || undefined }))
+      if (lessons.length < 4) return null
       localStorage.setItem(key, JSON.stringify(lessons))
       return lessons
     })

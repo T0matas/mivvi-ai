@@ -1,6 +1,7 @@
 import { Lesson, Subject, SchoolYear } from '../types'
 import type { PlannedLesson } from './lessonPlan'
 
+/** Lessons shown while a subject has no plan yet (placeholders). */
 export const LESSONS_PER_SUBJECT = 20
 
 /**
@@ -15,24 +16,26 @@ function subjectSeed(subject: string, schoolYear: string): number {
 }
 
 /**
- * The 20 lessons of a subject in a school year. Titles come from the AI plan
- * of that subject/year/course (services/lessonPlan) when it is ready.
+ * The lessons of a subject in a school year: one per lesson of its plan
+ * (services/lessonPlan, built from the official curriculum). Without a plan
+ * yet, there are none.
  */
 export function getLessonsBySubject(subject: Subject, schoolYear: SchoolYear, _language: string = 'pt-PT', plan?: PlannedLesson[] | null): Lesson[] {
     const lessons: Lesson[] = []
     const base = subjectSeed(subject, schoolYear) * 100
-    for (let i = 1; i <= LESSONS_PER_SUBJECT; i++) {
+    const count = plan?.length || 0
+    for (let i = 1; i <= count; i++) {
         lessons.push({
             id: base + i,
             lessonNumber: i,
-            title: plan?.[i - 1]?.title || `Lição ${i}`,
-            description: plan?.[i - 1]?.description || '',
+            title: plan![i - 1].title,
+            description: plan![i - 1].description || '',
             subject,
             schoolYear,
             exercises: [],
             xpReward: 100,
-            requiredXp: i === 1 ? 0 : Math.floor(((i - 1) * 40) + (i > 15 ? Math.pow(i - 15, 2) * 150 : 0)),
-            difficulty: i <= 7 ? 'beginner' : i <= 14 ? 'intermediate' : 'advanced',
+            requiredXp: 0,
+            difficulty: i <= count / 3 ? 'beginner' : i <= (2 * count) / 3 ? 'intermediate' : 'advanced',
             prerequisites: i > 1 ? [base + i - 1] : undefined,
         })
     }

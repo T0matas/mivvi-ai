@@ -6,6 +6,8 @@
 //
 // Used by the Vite dev/preview server (vite.config.ts) and by server/index.js.
 
+import { getCurriculum } from './curriculum/index.mjs';
+
 export const CODEVANTUM_MODELS = {
   fast: 'openai/gpt-oss-20b', // Kodu's tutor chat and answer feedback
   smart: 'openai/gpt-oss-120b', // lesson generation (structured JSON)
@@ -136,7 +138,7 @@ Return only a JSON object of the form {"exercises": [ ... ]}, with no markdown.`
 
 ${subjectBlock(ctx)}
 - Student level: ${clean(ctx.schoolYear, 120)}${ctx.course ? `\n- Course: ${clean(ctx.course, 120)}` : ''}
-${ctx.topic ? `- This lesson's topic: "${clean(ctx.topic, 120)}"${ctx.topicDescription ? ` (${clean(ctx.topicDescription, 200)})` : ''}. Every question must practise this topic, the one the teacher just explained.
+${ctx.topic ? `- This lesson's topic: "${clean(ctx.topic, 120)}"${ctx.topicDescription ? ` (${clean(ctx.topicDescription, 500)})` : ''}. Every question must practise this topic, the one the teacher just explained.
 ` : ''}${ctx.theory ? `- What the teacher explained in this lesson (the exercises must test exactly this): ${clean(ctx.theory, 1500)}\n` : ''}- Curriculum: the official Portuguese curriculum (Aprendizagens Essenciais of the Ministério da Educação) for this subject and year${ctx.lessonNumber ? `\n- This is lesson ${Number(ctx.lessonNumber)} of ${Number(ctx.totalLessons) || 20}: topics that come at this point of the school year` : '\n- This is a mixed review of the whole year'}
 - Level: exactly the level expected of a student in this school year — not easier, not harder
 - Language: ${target
@@ -191,7 +193,9 @@ Return only a JSON object, with no markdown.`,
 
 ${subjectBlock(ctx)}
 - Student level: ${clean(ctx.schoolYear, 120)}${ctx.course ? `\n- Course: ${clean(ctx.course, 120)}` : ''}
-- Topic: "${clean(ctx.topic, 120) || 'a review of the main topics of the year'}"${ctx.topicDescription ? ` (${clean(ctx.topicDescription, 200)})` : ''}
+- Topic: "${clean(ctx.topic, 120) || 'a review of the main topics of the year'}"${ctx.topicDescription ? `
+- What the official curriculum asks for this lesson: ${clean(ctx.topicDescription, 500)}` : ''}
+- Go as deep as the curriculum asks for this year; when an idea is hard, explain it in simpler words with an everyday example so the student really understands.
 - Follow the official Portuguese curriculum (Aprendizagens Essenciais) for this subject and year.
 - Write in ${language}${target ? ' (this is a foreign-language class: explain in simple ' + language + ' that a student of this year can follow, with short sentences)' : ''}, warm and clear, addressing the student as "tu" when writing in Portuguese.
 
@@ -240,23 +244,36 @@ Student's answer: "${clean(ctx.userAnswer)}"`,
   // The year's lesson plan for one subject: titles the home screen and lessons use.
   plan: (ctx) => {
     const target = contentLanguage(ctx);
+    const doc = ctx.__curriculum;
     return {
       model: CODEVANTUM_MODELS.smart,
-      maxTokens: 4000,
-      temperature: 0.4,
+      maxTokens: 6000,
+      temperature: 0.3,
       json: true,
-      system: `You are Mivvi, the AI tutor of the Mivvi learning app (built on Codevantum AI), planning a school year.
-Return only a JSON object {"lessons": [{"title": "...", "description": "..."}]}, with no markdown.`,
-      user: `Plan exactly ${Math.min(30, Math.max(5, Number(ctx.count) || 20))} lessons that cover the whole school year of this subject, in the order it is taught.
+      system: `You are Mivvi, the AI tutor of the Mivvi learning app (built on Codevantum AI), planning a school year from the official Portuguese curriculum.
+Return only a JSON object {"lessons": [{"title": "...", "description": "...", "content": "..."}]}, with no markdown.`,
+      user: `Plan the lessons of this subject for the whole school year, in the order the official document presents the content.
 
 ${subjectBlock(ctx)}
 - Year: ${clean(ctx.schoolYear, 120)}${ctx.course ? `
 - Course: ${clean(ctx.course, 120)}` : ''}
-- Plan ONLY topics of this subject itself. The course only tells you which programme of that subject applies; never plan topics of other subjects of the course.
-- Follow the official Portuguese curriculum (Aprendizagens Essenciais / programa do Ministério da Educação) for exactly this subject, year and course: real domains, units and topics a teacher would teach that year, never content from other years.
+- Plan ONLY topics of this subject itself, never of other subjects of the course.
+${doc ? `
+Official document: ${doc.title}${doc.url ? ` (${doc.url})` : ''}. Its content for this year (extracted text, may be messy):
+"""
+${doc.text}
+"""
+
+Rules for this plan:
+- Lesson 1 is the FIRST content of the document, lesson 2 the next, and so on: follow the document order exactly.
+- One lesson per content topic (a theme/domain split into its topics or learning objectives). Make as many lessons as the content needs: at least 6 and at most 40. Do not invent topics that are not in the document; do not skip topics that are.
+- Ignore teacher strategies, competence areas (Perfil dos Alunos letters), evaluation and introductions: only the content the student learns.
+${doc.kind === 'prof' ? '- This is a professional course organised in modules: keep the topics of each module together and in order (split a long module into several lessons).' : ''}` : `
+- Follow the official Portuguese curriculum (Aprendizagens Essenciais / programa do Ministério da Educação) for exactly this subject, year and course, in the order it is taught. Between 12 and 30 lessons.`}
 - Write in ${target ? languageName(target) + ' (it is a foreign-language class)' : languageName(ctx.language)}.
 - "title": the topic, short and specific (max 42 characters), never "Lição 1" or "Unidade 1".
-- "description": one plain sentence (max 90 characters) saying what the student will practise.`,
+- "description": one plain sentence (max 90 characters) saying what the student will learn.
+- "content": the specific learning objectives from the document this lesson covers, summarised (max 280 characters).`,
     };
   },
 };
@@ -374,7 +391,12 @@ export function createCodevantumAiHandler({ getKey = () => process.env.GROQ_API_
     const build = MODES[mode];
     if (!build) return sendJson(res, 400, { error: 'Modo de IA desconhecido.' });
 
-    const context = body.context && typeof body.context === 'object' ? body.context : {};
+    const context = body.context && typeof body.context === 'object' ? { ...body.context } : {};
+    delete context.__curriculum;
+    if (mode === 'plan' && context.subjectId) {
+      // The official document (DGE Aprendizagens Essenciais or the professional programme) for this subject and year.
+      context.__curriculum = await getCurriculum({ subject: clean(context.subjectId, 40), year: Number(context.year) || 0, course: clean(context.courseId, 20) || undefined }, fetchImpl).catch(() => null);
+    }
     const prompt = build(context);
     const messages = prompt.user ? [{ role: 'user', content: prompt.user }] : sanitizeMessages(body.messages);
     if (!messages.length) return sendJson(res, 400, { error: 'A conversa está vazia.' });
@@ -391,7 +413,7 @@ export function createCodevantumAiHandler({ getKey = () => process.env.GROQ_API_
     const controller = new AbortController();
     const onClose = () => { if (!res.writableEnded) controller.abort(); };
     res.on('close', onClose);
-    const timeout = setTimeout(() => controller.abort(), prompt.json ? 55000 : 45000);
+    const timeout = setTimeout(() => controller.abort(), mode === 'plan' ? 38000 : prompt.json ? 55000 : 45000);
 
     const call = (useModel) => {
       const oss = useModel.startsWith('openai/');

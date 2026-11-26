@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react'
 import { Add, ArrowForward, LockOutlined, Search, ExpandMore } from '@mui/icons-material'
 import { Subject, UserProfile, UserProgress } from '../types'
 import { getLessonsBySubject } from '../services/lessonService'
-import { useLessonPlan } from '../services/lessonPlan'
+import { useLessonPlan, getCachedPlan } from '../services/lessonPlan'
 import { soundManager } from '../utils/soundEffects'
 import Mascot from './Mascot'
 import { SubjectTile } from './SubjectDoodle'
@@ -55,7 +55,8 @@ export default function SubjectHome({ userProfile, userProgress, currentSubject,
     const { plan, loading } = useLessonPlan(focus, year, course)
 
     const progressOf = (subject: Subject) => {
-        const lessons = year ? getLessonsBySubject(subject, year, lang) : []
+        // The number of lessons comes from the subject's plan (official curriculum); unknown until planned.
+        const lessons = year ? getLessonsBySubject(subject, year, lang, subject === focus ? plan : getCachedPlan(subject, year, course)) : []
         const done = lessons.filter((l) => userProgress.completedLessons.includes(l.id)).length
         return { done, total: lessons.length }
     }
@@ -177,7 +178,7 @@ export default function SubjectHome({ userProfile, userProgress, currentSubject,
                                     <Box sx={{ flex: 1, height: 4, borderRadius: 999, bgcolor: 'rgba(255,255,255,.08)', overflow: 'hidden' }}>
                                         <Box sx={{ height: '100%', width: `${p.total ? (p.done / p.total) * 100 : 0}%`, minWidth: p.done ? 6 : 0, bgcolor: subjectColor(subject), borderRadius: 999 }} />
                                     </Box>
-                                    <Typography component="span" sx={{ fontSize: 12, color: cv.muted, fontVariantNumeric: 'tabular-nums' }}>{p.done}/{p.total}</Typography>
+                                    <Typography component="span" sx={{ fontSize: 12, color: cv.muted, fontVariantNumeric: 'tabular-nums' }}>{p.total ? `${p.done}/${p.total}` : '—'}</Typography>
                                 </Box>
                             </Box>
                         </Box>

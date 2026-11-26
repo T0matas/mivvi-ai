@@ -45,8 +45,8 @@ function lessonContext({ lessonId, subject, schoolYear, language = 'pt-PT', cour
     course: courseInfo(course)?.name,
     lessonNumber,
     topic: topic?.title,
-    topicDescription: topic?.description,
-    totalLessons: 20,
+    topicDescription: [topic?.description, topic?.content].filter(Boolean).join(' — ') || undefined,
+    totalLessons: getCachedPlan(subject, schoolYear, course)?.length || 20,
     isMath: isMathSubject(subject),
     isLanguage: isLanguageSubject(subject),
   };
