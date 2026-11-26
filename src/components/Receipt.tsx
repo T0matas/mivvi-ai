@@ -1,5 +1,5 @@
 import { Box, Typography } from '@mui/material'
-import { PhotoOutlined, AttachFileRounded, MicNoneRounded, CallRounded, PhoneMissedRounded, VideocamOutlined, BlockRounded } from '@mui/icons-material'
+import { PhotoOutlined, AttachFileRounded, MicNoneRounded, CallRounded, PhoneMissedRounded, VideocamOutlined, BlockRounded, SchoolRounded } from '@mui/icons-material'
 import { Receipt } from '../services/social'
 import { Avatar } from './Friends'
 import { cv } from '../theme'
@@ -35,6 +35,7 @@ const KINDS: [RegExp, typeof PhotoOutlined, string?][] = [
   [/^📞\s*Chamada perdida/, PhoneMissedRounded, cv.coral],
   [/^📞\s*/, CallRounded],
   [/^🚫\s*/, BlockRounded],
+  [/^📚\s*/, SchoolRounded],
 ]
 
 /** A chat preview where "📷 Foto"-style labels get the app's icons instead of emoji. */
@@ -44,7 +45,7 @@ export function PreviewText({ text }: { text: string }) {
       return (
         <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, color: color || 'inherit', minWidth: 0 }}>
           <Icon sx={{ fontSize: 14, flexShrink: 0 }} />
-          <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{text.replace(/^(📷|📎|🎤|📹|📞|🚫)\s*/, '')}</Box>
+          <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{text.replace(/^(📷|📎|🎤|📹|📞|🚫|📚)\s*/, '')}</Box>
         </Box>
       )
     }

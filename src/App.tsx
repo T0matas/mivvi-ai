@@ -27,8 +27,18 @@ import { readCloud, saveToCloud, mergeProgress } from './services/cloudSync';
 import { claimName, updatePublicProfile, heartbeat, toHandle, NameTakenError } from './services/social';
 import { syncLibrary } from './services/library';
 import NameClaimDialog from './components/NameClaimDialog';
+import Exam from './components/Exam';
+import { ExamResult } from './types';
 
 /** /add/<name> (from a friend's QR code): remember who to add, then open the app. */
+/** /exam?s=<subject>: the subject's final exam. */
+function ExamRoute({ userProfile, userProgress, onRecord }: { userProfile: UserProfile | null; userProgress: UserProgress; onRecord: (subject: string, r: ExamResult['last']) => void }) {
+  const navigate = useNavigate();
+  const subject = new URLSearchParams(window.location.search).get('s') || '';
+  if (!userProfile || !subject) return <Navigate to="/dashboard" replace />;
+  return <Exam subject={subject} userProfile={userProfile} previous={userProgress.exams?.[subject]} onRecord={(r) => onRecord(subject, r)} onExit={() => navigate('/dashboard')} />;
+}
+
 function AddFriendLink() {
   const { handle } = useParams();
   if (handle) localStorage.setItem('mivvi_pendingAdd', handle);
@@ -525,6 +535,7 @@ function App() {
                 <Dashboard
                   userProgress={userProgress}
                   onStartLesson={handleStartLesson}
+                  onStartExam={(subject: string) => navigate(`/exam?s=${encodeURIComponent(subject)}`)}
                   onRefillHearts={handleRefillHearts}
                   onPurchaseOutfit={handlePurchaseOutfit}
                   onEquipOutfit={handleEquipOutfit}
@@ -569,6 +580,13 @@ function App() {
             </PageTransition>
           } />
           <Route path="/add/:handle" element={<AddFriendLink />} />
+          <Route path="/exam" element={
+            <ExamRoute userProfile={userProfile} userProgress={userProgress} onRecord={(subject, last) => setUserProgress((prev) => {
+              const before = prev.exams?.[subject]
+              const best = Math.max(before?.best || 0, last.annulled ? 0 : last.score)
+              return { ...prev, exams: { ...(prev.exams || {}), [subject]: { best, last, attempts: (before?.attempts || 0) + 1 } } }
+            })} />
+          } />
           <Route path="/reset" element={
             <PageTransition>
               <ResetData />

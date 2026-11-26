@@ -51,6 +51,17 @@ service cloud.firestore {
         allow delete: if signedIn() && resource.data.from == me();
       }
     }
+
+    // Shared lesson plans (built from the official curriculum): anyone reads, a signed-in student saves a new one once.
+    match /plans/{id} {
+      allow read: if true;
+      allow create: if signedIn()
+        && request.resource.data.by == me()
+        && request.resource.data.lessons is list
+        && request.resource.data.lessons.size() >= 4
+        && request.resource.data.lessons.size() <= 40;
+    }
+
     match /groups/{gid} {
       function isMember() { return signedIn() && me() in resource.data.members; }
       function memberOfGroup() { return signedIn() && me() in get(/databases/$(database)/documents/groups/$(gid)).data.members; }
@@ -76,6 +87,16 @@ service cloud.firestore {
         allow read: if memberOfGroup();
         allow create: if memberOfGroup() && request.resource.data.from == me() && request.resource.data.data is string && request.resource.data.data.size() < 1000000;
         allow delete: if signedIn() && resource.data.from == me();
+      }
+      // Live lessons: a member starts one (host), only the host drives it; each member writes only their own answers.
+      match /sessions/{sid} {
+        allow read: if memberOfGroup();
+        allow create: if memberOfGroup() && request.resource.data.host == me();
+        allow update: if memberOfGroup() && resource.data.host == me() && request.resource.data.host == me();
+        match /answers/{uid} {
+          allow read: if memberOfGroup();
+          allow write: if memberOfGroup() && uid == me();
+        }
       }
     }
     match /calls/{call} {

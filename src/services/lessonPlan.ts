@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { askKodu, KoduError } from './codevantumAI'
+import { doc, getDoc, setDoc } from 'firebase/firestore'
+import { auth, db } from '../firebase'
 import { courseInfo, subjectName, yearNumber } from '../data/ptCurriculum'
 
 // The year's lesson plan of a subject. The server reads the official document
@@ -46,7 +48,16 @@ export function fetchPlan(subject: string, year: string, course?: string | null)
     }
     throw new Error('busy')
   }
-  const job = ask({
+  // Shared plans: the first student to open a subject/year plans it; everyone else reads it from Firestore.
+  const sharedId = key.replace(/^mivvi_plan_/, '')
+  const fromShared = async (): Promise<PlannedLesson[] | null> => {
+    try {
+      const snap = await getDoc(doc(db, 'plans', sharedId))
+      const lessons = snap.exists() ? (snap.data().lessons as PlannedLesson[]) : null
+      return Array.isArray(lessons) && lessons.length >= 4 ? lessons.slice(0, MAX_LESSONS) : null
+    } catch { return null }
+  }
+  const job = fromShared().then((shared) => shared ? (localStorage.setItem(key, JSON.stringify(shared)), shared) : ask({
       subject: subjectName(subject),
       subjectId: subject,
       schoolYear: `${n}.º ano (${n <= 9 ? 'Ensino Básico' : 'Ensino Secundário'}, Portugal)`,
@@ -63,8 +74,12 @@ export function fetchPlan(subject: string, year: string, course?: string | null)
         .map((l: any) => ({ title: String(l.title).trim().slice(0, 60), description: String(l.description || '').trim().slice(0, 140), content: String(l.content || '').trim().slice(0, 400) || undefined }))
       if (lessons.length < 4) return null
       localStorage.setItem(key, JSON.stringify(lessons))
+      if (auth.currentUser) {
+        setDoc(doc(db, 'plans', sharedId), JSON.parse(JSON.stringify({ lessons, subject, year, course: course || null, createdAt: Date.now(), by: auth.currentUser.uid })))
+          .catch(() => { /* someone saved it first */ })
+      }
       return lessons
-    })
+    }))
     .catch((error) => {
       console.warn('Could not plan the lessons for', subject, error)
       return null

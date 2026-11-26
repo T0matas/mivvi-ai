@@ -28,6 +28,7 @@ interface DashboardProps {
   userProgress: UserProgress
   userProfile: UserProfile
   onStartLesson: (lessonId: number, clickCoords?: { x: number, y: number } | null) => void // Updated signature
+  onStartExam?: (subject: Subject) => void
   onRefillHearts?: () => void
   onPurchaseOutfit?: (outfitId: string, cost: number) => boolean
   onEquipOutfit?: (outfitId: string) => void
@@ -36,7 +37,7 @@ interface DashboardProps {
   onClaimMission?: (missionId: string, reward: number) => void
 }
 
-export default function Dashboard({ userProgress, userProfile, onStartLesson, onRefillHearts, onPurchaseOutfit, onEquipOutfit, onUpdateProfile }: DashboardProps) {
+export default function Dashboard({ userProgress, userProfile, onStartLesson, onStartExam, onRefillHearts, onPurchaseOutfit, onEquipOutfit, onUpdateProfile }: DashboardProps) {
   const [activeTab, setActiveTab] = useState(0)
   const [pickerOpen, setPickerOpen] = useState(false)
 
@@ -134,6 +135,7 @@ export default function Dashboard({ userProgress, userProfile, onStartLesson, on
             handleStartLesson(lessonId)
           }}
           onAddSubject={() => setPickerOpen(true)}
+          onStartExam={onStartExam}
         />
       )}
 
@@ -141,7 +143,7 @@ export default function Dashboard({ userProgress, userProfile, onStartLesson, on
       {activeTab === TAB.library && <Library userProfile={userProfile} />}
 
       {activeTab === TAB.chat && (me ? (
-        <Chat me={me} friends={social.friends} incomingCount={social.incoming.length} chats={social.chats} groups={social.groups} openWith={chatWith}
+        <Chat me={me} friends={social.friends} incomingCount={social.incoming.length} chats={social.chats} groups={social.groups} openWith={chatWith} profile={userProfile}
           onAddFriend={openAdd} onOpenRequests={() => setActiveTab(TAB.profile)} />
       ) : (
         <Box sx={{ maxWidth: 440, mx: 'auto', px: 2.5, pt: 6, display: 'grid', justifyItems: 'center', textAlign: 'center', color: cv.text }}>

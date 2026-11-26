@@ -22,6 +22,8 @@ interface SubjectHomeProps {
     onSelectSubject: (subject: Subject) => void
     onOpenSubject: (subject: Subject, lessonId: number) => void
     onAddSubject: () => void
+    /** Opens the subject's final exam (after its last lesson). */
+    onStartExam?: (subject: Subject) => void
 }
 
 const VISIBLE = 6
@@ -43,7 +45,7 @@ const shimmerText = {
 }
 const rise = (delay = 0) => ({ animation: `homeIn .45s cubic-bezier(.22,1,.36,1) ${delay}s both`, '@keyframes homeIn': { from: { opacity: 0, transform: 'translateY(12px)' } } })
 
-export default function SubjectHome({ userProfile, userProgress, currentSubject, onSelectSubject, onOpenSubject, onAddSubject }: SubjectHomeProps) {
+export default function SubjectHome({ userProfile, userProgress, currentSubject, onSelectSubject, onOpenSubject, onAddSubject, onStartExam }: SubjectHomeProps) {
     const lang = userProfile.language || 'pt-PT'
     const year = userProfile.schoolYear
     const course = userProfile.course
@@ -64,6 +66,8 @@ export default function SubjectHome({ userProfile, userProgress, currentSubject,
     const heroLessons = focus && year ? getLessonsBySubject(focus, year, lang, plan) : []
     const done = heroLessons.filter((l) => userProgress.completedLessons.includes(l.id)).length
     const next = heroLessons.find((l) => !userProgress.completedLessons.includes(l.id))
+    const allDone = heroLessons.length > 0 && !next
+    const exam = focus ? userProgress.exams?.[focus] : undefined
     const locked = false
     const upcoming = next ? heroLessons.slice(next.lessonNumber, next.lessonNumber + 2) : []
     const color = focus ? subjectColor(focus) : cv.accent
@@ -110,8 +114,13 @@ export default function SubjectHome({ userProfile, userProgress, currentSubject,
                     </Box>
 
                     <Typography sx={{ fontFamily: cv.display, fontSize: { xs: 23, sm: 28 }, fontWeight: 700, letterSpacing: '-0.03em', lineHeight: 1.15, mt: 1.75, ...(planning && shimmerText) }}>
-                        {planning ? 'A preparar o teu plano…' : next ? next.title : 'Tudo concluído!'}
+                        {planning ? 'A preparar o teu plano…' : next ? next.title : allDone ? 'Exame final' : 'Tudo concluído!'}
                     </Typography>
+                    {allDone && !planning && (
+                        <Typography sx={{ color: cv.muted, fontSize: 14.5, mt: 0.75, maxWidth: 520, lineHeight: 1.5 }}>
+                            {exam ? `Melhor nota: ${String(exam.best).replace('.', ',')} valores · ${exam.attempts} ${exam.attempts === 1 ? 'tentativa' : 'tentativas'}.` : `Terminaste as ${heroLessons.length} lições. Mostra o que aprendeste num exame com todas as matérias do ano.`}
+                        </Typography>
+                    )}
                     {(planning || locked || next?.description) && (
                         <Typography sx={{ color: cv.muted, fontSize: 14.5, mt: 0.75, maxWidth: 520, lineHeight: 1.5 }}>
                             {planning ? `O Mivvi está a organizar os temas de ${subjectName(focus)} do teu ano.` : locked && next ? `Precisas de ${next.requiredXp} XP para abrir esta lição.` : next?.description}
@@ -128,6 +137,12 @@ export default function SubjectHome({ userProfile, userProgress, currentSubject,
                                 {locked && <LockOutlined sx={{ fontSize: 17 }} />}
                                 {done ? 'Continuar' : 'Começar'}
                                 {!locked && <ArrowForward className="hero-go" sx={{ fontSize: 18, transition: 'transform .2s' }} />}
+                            </Box>
+                        )}
+                        {allDone && !planning && onStartExam && (
+                            <Box component="button" onClick={() => { soundManager.playStart(); onStartExam(focus) }}
+                                sx={{ display: 'inline-flex', alignItems: 'center', gap: 1, height: 44, px: 2.5, border: 0, borderRadius: 999, font: 'inherit', fontSize: 15, fontWeight: 600, cursor: 'pointer', bgcolor: '#fff', color: '#0d0d0d', '&:hover': { bgcolor: '#e6e6e6' } }}>
+                                {exam ? 'Repetir exame' : 'Fazer exame'}<ArrowForward sx={{ fontSize: 18 }} />
                             </Box>
                         )}
                         {upcoming[0] && !planning && (

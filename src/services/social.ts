@@ -49,7 +49,7 @@ export interface ChatSummary {
   typing?: Record<string, number>
 }
 
-export type MessageKind = 'text' | 'image' | 'file' | 'audio' | 'call'
+export type MessageKind = 'text' | 'image' | 'file' | 'audio' | 'call' | 'lesson'
 
 export interface ChatMessage {
   id: string
@@ -69,6 +69,8 @@ export interface ChatMessage {
   callStatus?: 'done' | 'missed' | 'declined'
   edited?: boolean
   deleted?: boolean
+  /** kind 'lesson': the live group lesson this message invites to. */
+  sessionId?: string
 }
 
 /** Biggest attachment kept in the chat (stored inside Firestore, under its 1 MB document limit). */
@@ -290,14 +292,14 @@ export function subscribeMessages(ref: ThreadRef, cb: (list: ChatMessage[]) => v
     { includeMetadataChanges: true },
     (s) => cb(s.docs.map((d) => {
       const x = d.data({ serverTimestamps: 'estimate' })
-      return { id: d.id, from: x.from, text: x.text || '', at: ms(x.at) || Date.now(), pending: d.metadata.hasPendingWrites, kind: x.kind || 'text', fileId: x.fileId, name: x.name, size: x.size, mime: x.mime, duration: x.duration, callType: x.callType, callStatus: x.callStatus, edited: !!x.editedAt, deleted: !!x.deleted }
+      return { id: d.id, from: x.from, text: x.text || '', at: ms(x.at) || Date.now(), pending: d.metadata.hasPendingWrites, kind: x.kind || 'text', fileId: x.fileId, name: x.name, size: x.size, mime: x.mime, duration: x.duration, callType: x.callType, callStatus: x.callStatus, edited: !!x.editedAt, deleted: !!x.deleted, sessionId: x.sessionId }
     })),
     (e) => { console.warn('messages', e); onError?.(e) },
   )
 }
 
 const previewOf = (kind: MessageKind, body: string, extra: Partial<ChatMessage>) =>
-  kind === 'image' ? '📷 Foto' : kind === 'file' ? `📎 ${extra.name || 'Ficheiro'}` : kind === 'audio' ? '🎤 Mensagem de voz' : kind === 'call' ? (extra.callStatus === 'missed' ? '📞 Chamada perdida' : extra.callType === 'video' ? '📹 Videochamada' : '📞 Chamada') : body
+  kind === 'lesson' ? `📚 Aula em grupo: ${body}` : kind === 'image' ? '📷 Foto' : kind === 'file' ? `📎 ${extra.name || 'Ficheiro'}` : kind === 'audio' ? '🎤 Mensagem de voz' : kind === 'call' ? (extra.callStatus === 'missed' ? '📞 Chamada perdida' : extra.callType === 'video' ? '📹 Videochamada' : '📞 Chamada') : body
 
 /** Base fields every write to a thread summary needs (chats keep their two users). */
 const summaryBase = (ref: ThreadRef, users?: string[]) => (ref.col === 'chats' && users ? { users: [...users].sort() } : {})
@@ -318,7 +320,7 @@ export async function sendToThread(ref: ThreadRef, me: { uid: string; name?: str
     ...summaryBase(ref, users), lastText: previewOf(kind, body, extra).slice(0, 140), lastFrom: me.uid, ...(ref.col === 'groups' && { lastFromName: me.name || '' }),
     lastAt: serverTimestamp(), reads: { [me.uid]: serverTimestamp() }, typing: { [me.uid]: 0 },
   }, { merge: true })
-  batch.set(msgRef, { ...JSON.parse(JSON.stringify({ from: me.uid, text: body, kind, fileId, name: extra.name, size: extra.size, mime: extra.mime, duration: extra.duration, callType: extra.callType, callStatus: extra.callStatus })), at: serverTimestamp() })
+  batch.set(msgRef, { ...JSON.parse(JSON.stringify({ from: me.uid, text: body, kind, fileId, name: extra.name, size: extra.size, mime: extra.mime, duration: extra.duration, callType: extra.callType, callStatus: extra.callStatus, sessionId: extra.sessionId })), at: serverTimestamp() })
   await batch.commit()
 }
 

@@ -2,12 +2,15 @@ import { Fragment, useEffect, useRef, useState } from 'react'
 import { Box, Typography, IconButton, CircularProgress, Dialog, Portal } from '@mui/material'
 import {
   ArrowBack, SendRounded, AttachFileRounded, MicRounded, DeleteOutlineRounded, CallRounded, VideocamRounded,
-  PlayArrowRounded, PauseRounded, BlockRounded, EditRounded, ContentCopyRounded, MoreHorizRounded, CheckRounded, InsertDriveFileRounded, DownloadRounded, CallMadeRounded, CallReceivedRounded, PhoneMissedRounded, Close,
+  PlayArrowRounded, PauseRounded, BlockRounded, SchoolRounded, EditRounded, ContentCopyRounded, MoreHorizRounded, CheckRounded, InsertDriveFileRounded, DownloadRounded, CallMadeRounded, CallReceivedRounded, PhoneMissedRounded, Close,
 } from '@mui/icons-material'
 import { ChatMessage, ChatSummary, PublicProfile, GroupInfo, ThreadRef, isOnline, markRead, receiptOf, seenBy, editMessage, deleteMessage, sendToThread, subscribeMessages, loadFile, pingTyping, stopTyping, MAX_FILE_BYTES } from '../services/social'
 import { FriendView } from '../services/useSocial'
 import { Avatar } from './Friends'
 import { useCalls } from './CallProvider'
+import GroupLesson, { StartGroupLessonDialog } from './GroupLesson'
+import { subscribeActiveSession, GroupSession } from '../services/groupLesson'
+import { UserProfile } from '../types'
 import { SeenLine } from './Receipt'
 import { yearLabel } from '../data/ptCurriculum'
 import { soundManager } from '../utils/soundEffects'
@@ -72,7 +75,7 @@ export function GroupAvatar({ name, color, size = 36 }: { name: string; color?: 
   )
 }
 
-export default function Conversation({ me, thread, chat, mobile, onBack, onOpenInfo }: { me: PublicProfile; thread: Thread; chat?: ChatSummary; mobile: boolean; onBack: () => void; onOpenInfo?: () => void }) {
+export default function Conversation({ me, thread, chat, mobile, onBack, onOpenInfo, profile }: { me: PublicProfile; thread: Thread; chat?: ChatSummary; mobile: boolean; onBack: () => void; onOpenInfo?: () => void; profile?: UserProfile }) {
   const friend = thread.friend
   const others = thread.members.filter((x) => x.uid !== me.uid)
   const otherIds = others.map((x) => x.uid)
@@ -102,6 +105,11 @@ export default function Conversation({ me, thread, chat, mobile, onBack, onOpenI
   const users = thread.isGroup ? undefined : [me.uid, friend!.uid]
   const post = (text: string, extra?: Partial<ChatMessage>, file?: { data: string; mime: string; name: string; size: number }) => sendToThread(ref, { uid: me.uid, name: me.name }, text, extra, file, users)
   const [typer, setTyper] = useState('')
+  // Live lesson in a group.
+  const [liveSession, setLiveSession] = useState<GroupSession | null>(null)
+  const [openSession, setOpenSession] = useState<string | null>(null)
+  const [startLesson, setStartLesson] = useState(false)
+  useEffect(() => (thread.isGroup ? subscribeActiveSession(thread.ref.id, setLiveSession) : undefined), [thread.isGroup, thread.ref.id])
 
   useEffect(() => subscribeMessages(ref, (list) => {
     if (lastCount.current && list.length > lastCount.current && list[list.length - 1].from !== me.uid) { soundManager.playMessage(); setTyping(false) }
@@ -245,8 +253,24 @@ export default function Conversation({ me, thread, chat, mobile, onBack, onOpenI
         </Box>
         {friend && <IconButton onClick={() => call(friend, 'audio')} disabled={inCall} aria-label="Chamada de voz" title="Chamada de voz" sx={{ width: 38, height: 38 }}><CallRounded sx={{ fontSize: 20 }} /></IconButton>}
         {friend && <IconButton onClick={() => call(friend, 'video')} disabled={inCall} aria-label="Videochamada" title="Videochamada" sx={{ width: 38, height: 38 }}><VideocamRounded sx={{ fontSize: 21 }} /></IconButton>}
+        {thread.isGroup && profile && <IconButton onClick={() => { soundManager.playClick(); setStartLesson(true) }} aria-label="Aula em grupo" title="Aula em grupo" sx={{ width: 38, height: 38 }}><SchoolRounded sx={{ fontSize: 20 }} /></IconButton>}
         {thread.isGroup && <IconButton onClick={onOpenInfo} aria-label="Detalhes do grupo" title="Detalhes do grupo" sx={{ width: 38, height: 38 }}><MoreHorizRounded sx={{ fontSize: 21 }} /></IconButton>}
       </Box>
+
+      {/* A lesson is running in this group */}
+      {liveSession && (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, px: { xs: 1.5, md: 2 }, py: 1, borderBottom: `1px solid ${cv.border}`, bgcolor: 'rgba(96,165,250,.07)', flexShrink: 0 }}>
+          <SchoolRounded sx={{ fontSize: 19, color: cv.accent }} />
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography sx={{ fontSize: 13.5, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Aula em grupo: {liveSession.topic}</Typography>
+            <Typography sx={{ fontSize: 12, color: cv.muted }}>Com {liveSession.host === me.uid ? 'ti' : liveSession.hostName} · pergunta {liveSession.index + 1} de {liveSession.questions.length}</Typography>
+          </Box>
+          <Box component="button" onClick={() => { soundManager.playStart(); setOpenSession(liveSession.id) }} sx={{ height: 34, px: 1.75, border: 0, borderRadius: 999, bgcolor: '#fff', color: '#0d0d0d', font: 'inherit', fontSize: 13.5, fontWeight: 600, cursor: 'pointer' }}>Entrar</Box>
+        </Box>
+      )}
+      {thread.isGroup && profile && <StartGroupLessonDialog open={startLesson} onClose={() => setStartLesson(false)} gid={thread.ref.id} me={{ uid: me.uid, name: me.name }} profile={profile}
+        onStarted={(sid) => { setStartLesson(false); setOpenSession(sid) }} />}
+      {openSession && <Portal><GroupLesson gid={thread.ref.id} sid={openSession} me={{ uid: me.uid, name: me.name, photo: me.photo }} members={thread.members} onClose={() => setOpenSession(null)} /></Portal>}
 
       {/* Messages */}
       <Box ref={scroller} sx={{ flex: 1, overflowY: 'auto', px: { xs: 1.5, md: 2.5 }, py: 2 }}>
@@ -319,7 +343,26 @@ export default function Conversation({ me, thread, chat, mobile, onBack, onOpenI
                           <Box component="button" onClick={() => saveEdit(m)} sx={{ ...miniBtn, bgcolor: '#fff', color: '#0d0d0d' }}><CheckRounded sx={{ fontSize: 15 }} />Guardar</Box>
                         </Box>
                       </Box>
-                    ) : m.kind === 'image' && m.fileId ? <ImageMsg chatId={ref} m={m} onOpen={setViewer} />
+                    ) : m.kind === 'lesson' || /^📚 Começou uma aula em grupo/.test(m.text) ? (() => {
+                      const sid = m.sessionId || liveSession?.id
+                      const live = !!sid && liveSession?.id === sid
+                      const topic = m.kind === 'lesson' ? m.text : m.text.replace(/^📚 Começou uma aula em grupo:\s*/, '')
+                      return (
+                        <Box sx={{ mt: 0.5, width: 'min(380px, 100%)', display: 'flex', alignItems: 'center', gap: 1.25, p: 1.25, borderRadius: '16px', bgcolor: live ? 'rgba(96,165,250,.08)' : cv.surface, boxShadow: `inset 0 0 0 1px ${live ? 'rgba(96,165,250,.25)' : cv.border}` }}>
+                          <Box sx={{ width: 40, height: 40, borderRadius: '12px', bgcolor: live ? cv.accent : cv.soft, color: live ? '#0d0d0d' : cv.muted, display: 'grid', placeItems: 'center', flexShrink: 0 }}><SchoolRounded sx={{ fontSize: 21 }} /></Box>
+                          <Box sx={{ flex: 1, minWidth: 0 }}>
+                            <Typography sx={{ fontSize: 12, fontWeight: 700, color: live ? cv.accent : cv.muted, textTransform: 'uppercase', letterSpacing: '.06em' }}>{live ? 'Aula em grupo · agora' : 'Aula em grupo'}</Typography>
+                            <Typography sx={{ fontSize: 14, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{topic}</Typography>
+                          </Box>
+                          {sid && (
+                            <Box component="button" onClick={() => { soundManager.playStart(); setOpenSession(sid) }}
+                              sx={{ height: 34, px: 1.75, border: 0, borderRadius: 999, font: 'inherit', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', flexShrink: 0, bgcolor: live ? '#fff' : 'transparent', color: live ? '#0d0d0d' : cv.text, boxShadow: live ? 'none' : `inset 0 0 0 1px ${cv.borderStrong}` }}>
+                              {live ? 'Entrar' : 'Ver'}
+                            </Box>
+                          )}
+                        </Box>
+                      )
+                    })() : m.kind === 'image' && m.fileId ? <ImageMsg chatId={ref} m={m} onOpen={setViewer} />
                       : m.kind === 'file' && m.fileId ? <FileMsg chatId={ref} m={m} />
                         : m.kind === 'audio' && m.fileId ? <AudioMsg chatId={ref} m={m} mine={mine} />
                           : <Typography sx={{ fontSize: 14.5, lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: m.pending ? cv.muted : '#e4e4e7' }}>

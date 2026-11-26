@@ -6,6 +6,7 @@ import { PreviewText, SeenAvatar } from './Receipt'
 import Conversation, { GroupAvatar, Thread } from './Conversation'
 import { CreateGroupDialog, GroupInfoDialog } from './Groups'
 import { FriendView } from '../services/useSocial'
+import { UserProfile } from '../types'
 import { Avatar } from './Friends'
 import Mascot from './Mascot'
 import { soundManager } from '../utils/soundEffects'
@@ -25,6 +26,7 @@ interface Props {
   openWith?: string | null
   onAddFriend: () => void
   onOpenRequests: () => void
+  profile?: UserProfile
 }
 
 const time = (ms: number) => new Date(ms).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })
@@ -34,7 +36,7 @@ const shortWhen = (ms?: number) => {
   return d.toDateString() === new Date().toDateString() ? time(ms) : d.toLocaleDateString('pt-PT', { day: 'numeric', month: 'short' })
 }
 
-export default function Chat({ me, friends, incomingCount, chats, groups, openWith, onAddFriend, onOpenRequests }: Props) {
+export default function Chat({ me, friends, incomingCount, chats, groups, openWith, onAddFriend, onOpenRequests, profile }: Props) {
   const isMobile = useIsMobile()
   const [active, setActive] = useState<string | null>(openWith ? `dm:${openWith}` : null)
   const [query, setQuery] = useState('')
@@ -209,7 +211,7 @@ export default function Chat({ me, friends, incomingCount, chats, groups, openWi
         )}
 
         {thread ? (
-          <Conversation key={active!} me={me} thread={thread} chat={summary} mobile={isMobile} onBack={() => setActive(null)} onOpenInfo={() => setInfoOpen(true)} />
+          <Conversation key={active!} me={me} thread={thread} chat={summary} mobile={isMobile} onBack={() => setActive(null)} onOpenInfo={() => setInfoOpen(true)} profile={profile} />
         ) : !isMobile && (
           <Box sx={{ display: 'grid', placeItems: 'center', textAlign: 'center', p: 4 }}>
             <Box sx={{ display: 'grid', justifyItems: 'center', gap: 1 }}>

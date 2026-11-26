@@ -215,11 +215,43 @@ export function generateExercises(lessonId: number, difficulty: 'easy' | 'medium
   return generateLessonExercises({ lessonId, difficulty, subject, schoolYear, language, course });
 }
 
+/** The final exam of a subject: questions over every topic of its plan. Throws when the AI can't write it. */
+export async function generateExam(subject: Subject, schoolYear: string, course?: string, count = 20): Promise<Exercise[]> {
+  const plan = getCachedPlan(subject, schoolYear, course) || []
+  const context = {
+    subject: subjectName(subject),
+    subjectId: subject,
+    schoolYear: getSchoolYearDescription(schoolYear),
+    course: courseInfo(course)?.name,
+    language: 'pt-PT',
+    count,
+    topics: plan.map((l) => [l.title, l.content || l.description].filter(Boolean).join(': ')),
+  };
+  let last: unknown = null;
+  for (const wait of [0, 8000, 20000]) {
+    if (wait) await new Promise((r) => setTimeout(r, wait));
+    try {
+      let parsed: any = parseJson(await askKodu({ mode: 'exam', context }));
+      if (!Array.isArray(parsed)) parsed = parsed.exercises || Object.values(parsed).find(Array.isArray) || [];
+      const list = (parsed as any[]).filter(isUsable).slice(0, count).map(normalizeExercise);
+      if (list.length >= Math.min(8, count)) return list;
+      last = new Error('too few questions');
+    } catch (e) {
+      last = e;
+      if ((e as any)?.status && (e as any).status !== 429) break;
+    }
+  }
+  throw last || new Error('no exam');
+}
+
 // ── Checking answers ────────────────────────────────────────────────────────
 
 /** Forgiving comparison: case, accents, punctuation and extra spaces don't matter. */
 export const normalizeAnswer = (s: string) =>
-  s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^\p{L}\p{N}\s.,]/gu, ' ').replace(/\s+/g, ' ').trim();
+  s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+    // Signs matter in answers: "-7" is not "7" (the Unicode minus and dashes count as minus).
+    .replace(/[−–—]/g, '-')
+    .replace(/[^\p{L}\p{N}\s.,+\-/%=<>]/gu, ' ').replace(/\s+/g, ' ').trim();
 
 const ARTICLES = /^(o|a|os|as|um|uma|the|a|an|el|la|los|las|le|les|un|une|der|die|das|il|lo|gli)\s+/;
 

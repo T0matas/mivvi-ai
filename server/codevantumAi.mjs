@@ -178,6 +178,38 @@ The visual must never contain the correct answer.`,
     };
   },
 
+  // Final exam of a subject: questions over every topic of the year's plan.
+  exam: (ctx) => {
+    const target = contentLanguage(ctx);
+    const language = target ? languageName(target) : languageName(ctx.language);
+    const topics = Array.isArray(ctx.topics) ? ctx.topics.map((t) => clean(String(t), 220)).filter(Boolean).slice(0, 40) : [];
+    const count = Math.min(25, Math.max(8, Number(ctx.count) || 20));
+    return {
+      model: CODEVANTUM_MODELS.smart,
+      maxTokens: 9000,
+      temperature: 0.6,
+      json: true,
+      system: `You are Mivvi, the AI tutor of the Mivvi learning app (built on Codevantum AI), writing the FINAL EXAM of a school subject, like a teacher's end-of-year test.
+Return only a JSON object {"exercises": [ ... ]}, with no markdown.`,
+      user: `Write exactly ${count} exam questions.
+
+${subjectBlock(ctx)}
+- Student level: ${clean(ctx.schoolYear, 120)}${ctx.course ? `\n- Course: ${clean(ctx.course, 120)}` : ''}
+- The year's topics, in order (the exam must cover all of them, spread evenly, in this order):
+${topics.map((t, i) => `  ${i + 1}. ${t}`).join('\n')}
+- Difficulty: a real end-of-year exam for this year — some direct questions, most applying the knowledge, a few harder ones.
+- Language: ${target ? `everything in ${language} (foreign-language class)` : language}.
+
+Rules:
+1. About 70% "multiple-choice" (exactly 4 options, one correct, copied exactly into "correctAnswer") and 30% "typing" (one short, unambiguous answer, with every other valid form in "acceptedAnswers").
+2. No two questions about the same point. No listening or speaking.
+3. Never give away the answer in the question or in the visual.
+4. Each question under 160 characters.
+
+Each item: {"type": "multiple-choice" | "typing", "question": "...", "correctAnswer": "...", "acceptedAnswers": [], "options": ["4 for multiple-choice, [] for typing"], "topic": "the topic number it tests", "visual": null or one of {"kind":"excerpt","text":"...","source":"..."} | {"kind":"formula","text":"..."} | {"kind":"table","headers":[],"rows":[[]]} | {"kind":"list","title":"...","items":[]}}`,
+    };
+  },
+
   // The "aula": what a teacher explains before the exercises.
   lesson: (ctx) => {
     const target = contentLanguage(ctx);

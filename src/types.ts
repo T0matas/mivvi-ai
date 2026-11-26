@@ -45,6 +45,16 @@ export interface UserProgress {
   dailyPerfectLessons?: number
   weeklyXP?: number
   claimedMissionIds?: string[]
+  /** Final exams by subject: the best result (0–20) and the last attempt. */
+  exams?: Record<Subject, ExamResult>
+}
+
+export interface ExamResult {
+  /** Best mark so far, 0–20. */
+  best: number
+  /** Last attempt. */
+  last: { score: number; correct: number; total: number; date: number; annulled?: boolean; reason?: string }
+  attempts: number
 }
 
 export interface Exercise {
