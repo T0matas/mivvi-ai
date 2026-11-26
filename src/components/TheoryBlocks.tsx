@@ -99,14 +99,13 @@ export function TopicImage({ query, hideTitle }: { query: string; hideTitle?: bo
           </>
         )}
       </Box>
-      {img && (
+      {/* No caption in exams: just the picture. */}
+      {img && !hideTitle && (
         <Box component="figcaption" sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mt: 0.75, fontSize: 12, color: cv.faint }}>
-          <span>{hideTitle ? 'Imagem: Wikipédia' : img.title}</span>
-          {!hideTitle && (
-            <Box component="a" href={img.page} target="_blank" rel="noopener noreferrer" sx={{ ml: 'auto', display: 'inline-flex', alignItems: 'center', gap: 0.25, color: cv.faint, textDecoration: 'none', '&:hover': { color: cv.muted } }}>
-              Wikipédia <OpenInNewRounded sx={{ fontSize: 12 }} />
-            </Box>
-          )}
+          <span>{img.title}</span>
+          <Box component="a" href={img.page} target="_blank" rel="noopener noreferrer" sx={{ ml: 'auto', display: 'inline-flex', alignItems: 'center', gap: 0.25, color: cv.faint, textDecoration: 'none', '&:hover': { color: cv.muted } }}>
+            Wikipédia <OpenInNewRounded sx={{ fontSize: 12 }} />
+          </Box>
         </Box>
       )}
     </Box>
