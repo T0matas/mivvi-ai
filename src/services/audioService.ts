@@ -97,7 +97,8 @@ export const playListeningAudio = async (
         console.warn('Piper voice unavailable, using the browser voice:', error);
         try {
             if (onStart) onStart();
-            await speak(text, language, 0.9); // Slightly slower for listening exercises
+            // Chrome sometimes never reports the end of the browser voice: stop waiting after a time based on the sentence length.
+            await Promise.race([speak(text, language, 0.9), new Promise((r) => setTimeout(r, 3000 + text.length * 90))]);
         } catch (e) {
             console.error('Error playing listening audio:', e);
         }

@@ -11,7 +11,7 @@ import ExitConfirmDialog from './ExitConfirmDialog'
 import LessonRewards from './LessonRewards'
 import LessonTheoryView, { rich } from './LessonTheoryView'
 import { playListeningAudio } from '../services/audioService'
-import { preloadVoice, voiceLanguage, stopPiper } from '../services/piperVoice'
+import { preloadVoice, voiceLanguage, stopPiper, prepareClips } from '../services/piperVoice'
 import { cv } from '../theme'
 import QuestionVisual from './QuestionVisual'
 import { getCachedPlan } from '../services/lessonPlan'
@@ -243,6 +243,13 @@ export default function Lesson({ lessonId, onComplete, onMistake, onBack, userPr
       () => { setVoiceLoad(null); setIsPlayingAudio(false) },
       (f) => setVoiceLoad(f))
   }
+
+  // As soon as the exercises exist (usually while the class is being read),
+  // their listening sentences are turned into audio, so "Ouvir" plays at once.
+  useEffect(() => {
+    const texts = exercises.filter((e) => e.exerciseType === 'listening').map((e) => e.audioText || e.question)
+    if (texts.length) preloadVoice(audioLang).then(() => prepareClips(texts, audioLang), () => { /* browser voice */ })
+  }, [exercises, audioLang])
 
   // A new question (or leaving) stops the voice.
   useEffect(() => () => stopPiper(), [index, inRetryPhase])

@@ -46,19 +46,21 @@ export default function MivviLoader({ color, size = 84, outfit }: { color: strin
 
 // ── A small living Mivvi for other places ────────────────────────────────────
 
-const LOOK_AROUND = [{ x: 0, y: 0 }, { x: -4, y: 0 }, { x: -4, y: 0 }, { x: 0, y: -3 }, { x: 4, y: 0 }, { x: 4, y: 0 }, { x: 0, y: 0 }, { x: 0, y: 0 }]
+// Waiting: the eyes follow the curious head tilt (right, back, left, back) — 8 steps over the 5 s loop.
+const LOOK_AROUND = [{ x: 0, y: 0 }, { x: 3, y: -2 }, { x: 4, y: -3 }, { x: 4, y: -3 }, { x: 0, y: 0 }, { x: -3, y: -2 }, { x: -4, y: -3 }, { x: 0, y: 0 }]
 // While talking: mostly at the text it's saying, now and then at the student.
 const TALK_LOOK = [{ x: 5, y: 1 }, { x: 5, y: 1 }, { x: 5, y: 2 }, { x: 0, y: 0 }, { x: 0, y: 0 }, { x: 5, y: 1 }, { x: 4, y: -1 }, { x: 5, y: 1 }]
 
 /**
  * `talk`: next to something Mivvi says. It speaks in little bounces (squash
- * and stretch) and looks from the text to the student. `wait`: it floats and looks around, waiting for a question.
+ * and stretch) and looks from the text to the student. `wait`: curious, waiting for a question — it tilts its
+ * head to one side and the other, eyes following, and a little "?" pops up.
  */
 export function MivviAlive({ size = 40, mode = 'wait', outfit }: { size?: number; mode?: 'talk' | 'wait'; outfit?: string }) {
   const talk = mode === 'talk'
   const [g, setG] = useState(0)
   useEffect(() => {
-    const t = window.setInterval(() => setG((i) => (i + 1) % 8), talk ? 600 : 700)
+    const t = window.setInterval(() => setG((i) => (i + 1) % 8), talk ? 600 : 625)
     return () => window.clearInterval(t)
   }, [talk])
 
@@ -74,21 +76,29 @@ export function MivviAlive({ size = 40, mode = 'wait', outfit }: { size?: number
         '58%': { transform: 'translateY(0) scale(.98, 1.02) rotate(0deg)' },
         '72%': { transform: 'translateY(-3px) scale(1.04, .96) rotate(3deg)' },
         '84%': { transform: 'translateY(0) scale(1, 1) rotate(0deg)' } },
-      '@keyframes maFloat': { '0%, 100%': { transform: 'translateY(0) rotate(-3deg)' }, '50%': { transform: 'translateY(-6px) rotate(3deg)' } },
-      '@keyframes maHop': { '0%, 80%, 100%': { transform: 'translateY(0) scale(1, 1)' }, '85%': { transform: 'translateY(0) scale(1.08, .9)' }, '90%': { transform: 'translateY(-9px) scale(.95, 1.06)' }, '95%': { transform: 'translateY(0) scale(1.05, .95)' } },
-      '@keyframes maShadow': { '0%, 100%': { transform: 'scaleX(1)', opacity: 0.45 }, '50%': { transform: 'scaleX(.75)', opacity: 0.22 } },
+      '@keyframes maCurious': {
+        '0%, 8%': { transform: 'rotate(0deg) translateY(0)' },
+        '18%, 40%': { transform: 'rotate(11deg) translateY(-2px)' },
+        '50%, 56%': { transform: 'rotate(0deg) translateY(0)' },
+        '66%, 86%': { transform: 'rotate(-9deg) translateY(-2px)' },
+        '96%, 100%': { transform: 'rotate(0deg) translateY(0)' } },
+      '@keyframes maAskR': { '0%, 14%': { opacity: 0, transform: 'translate(0, 4px) scale(.4)' }, '22%': { opacity: 1, transform: 'translate(0, 0) scale(1.1)' }, '26%, 38%': { opacity: 1, transform: 'translate(0, -2px) scale(1)' }, '46%, 100%': { opacity: 0, transform: 'translate(2px, -8px) scale(.9)' } },
+      '@keyframes maAskL': { '0%, 62%': { opacity: 0, transform: 'translate(0, 4px) scale(.4)' }, '70%': { opacity: 1, transform: 'translate(0, 0) scale(1.1)' }, '74%, 84%': { opacity: 1, transform: 'translate(0, -2px) scale(1)' }, '92%, 100%': { opacity: 0, transform: 'translate(-2px, -8px) scale(.9)' } },
       '@media (prefers-reduced-motion: reduce)': { '& *': { animation: 'none !important' } } }}>
       {/* Mivvi (an outer box hops now and then, the inner one floats or speaks) */}
-      <Box sx={{ display: 'inline-flex', animation: talk ? 'none' : 'maHop 6s ease-in-out 2s infinite', transformOrigin: '50% 100%' }}>
+      <Box sx={{ display: 'inline-flex' }}>
         <Box sx={{ display: 'inline-flex', transformOrigin: '50% 90%', '& .mascot-gaze': { transition: 'transform .3s ease-out' },
-          animation: talk ? 'maSpeak 2.2s ease-in-out infinite' : 'maFloat 2.8s ease-in-out infinite' }}>
+          animation: talk ? 'maSpeak 2.2s ease-in-out infinite' : 'maCurious 5s cubic-bezier(.45,0,.25,1) infinite' }}>
           <Mascot size={size} mood={talk ? 'happy' : 'idle'} outfit={outfit} gaze={(talk ? TALK_LOOK : LOOK_AROUND)[g]} />
         </Box>
       </Box>
-      {/* A soft shadow under the floating Mivvi */}
-      {!talk && (
-        <Box sx={{ position: 'absolute', left: '50%', bottom: -size * 0.14, width: size * 0.6, height: Math.max(4, size * 0.1), ml: `${-size * 0.3}px`, borderRadius: '50%', bgcolor: 'rgba(0,0,0,.55)', filter: 'blur(2px)', animation: 'maShadow 2.8s ease-in-out infinite' }} />
-      )}
+      {/* The little "?" on the side it tilts to */}
+      {!talk && ['R', 'L'].map((side) => (
+        <Box key={side} aria-hidden sx={{ position: 'absolute', top: -size * 0.12, [side === 'R' ? 'right' : 'left']: -size * 0.22,
+          width: size * 0.34, height: size * 0.34, borderRadius: '50%', bgcolor: '#2a2a2a', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,.12)',
+          display: 'grid', placeItems: 'center', fontWeight: 800, fontSize: size * 0.21, color: '#9fc9ff', lineHeight: 1,
+          opacity: 0, animation: `maAsk${side} 5s cubic-bezier(.45,0,.25,1) infinite` }}>?</Box>
+      ))}
     </Box>
   )
 }

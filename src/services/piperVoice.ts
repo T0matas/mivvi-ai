@@ -63,6 +63,18 @@ async function clip(text: string, lang: string, onProgress?: VoiceProgress): Pro
   return clips.get(key)!
 }
 
+/**
+ * Turns these sentences into audio now (one after another, in the background),
+ * so pressing "Ouvir" later plays at once.
+ */
+export async function prepareClips(texts: string[], lang: string) {
+  if (!supported()) return
+  for (const t of texts) {
+    if (!t.trim()) continue
+    try { await clip(t, lang) } catch { return /* Piper unavailable: the browser voice will be used */ }
+  }
+}
+
 let playing: HTMLAudioElement | null = null
 
 export function stopPiper() {
@@ -82,8 +94,16 @@ export async function speakPiper(text: string, lang: string, opts: { rate?: numb
   audio.playbackRate = opts.rate ?? 1
   playing = audio
   await new Promise<void>((resolve, reject) => {
-    audio.onended = () => resolve()
-    audio.onerror = () => reject(new Error('could not play'))
-    audio.play().then(() => opts.onStart?.(), reject)
+    let safety = 0
+    const finish = () => { window.clearTimeout(safety); resolve() }
+    // Ends however the audio stops (finished, paused, replaced), so the player never stays on "A tocar…".
+    audio.onended = finish
+    audio.onpause = finish
+    audio.onerror = () => { window.clearTimeout(safety); reject(new Error('could not play')) }
+    audio.play().then(() => {
+      opts.onStart?.()
+      const secs = Number.isFinite(audio.duration) ? audio.duration / (audio.playbackRate || 1) : 30
+      safety = window.setTimeout(finish, (secs + 2) * 1000)
+    }, reject)
   })
 }

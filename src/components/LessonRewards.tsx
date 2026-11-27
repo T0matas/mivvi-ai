@@ -76,7 +76,7 @@ export default function LessonRewards({ open, correctAnswers, totalQuestions, on
                     </Typography>
                     <Typography sx={{ color: cv.muted, mt: 1, ...up(0.14) }}>{line}</Typography>
 
-                    <Box sx={{ width: '100%', mt: 4, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', border: `1px solid ${cv.border}`, borderRadius: '18px', overflow: 'hidden', ...up(0.2) }}>
+                    <Box sx={{ width: '100%', mt: 4, display: 'grid', gridTemplateColumns: `repeat(${stats.length}, 1fr)`, border: `1px solid ${cv.border}`, borderRadius: '18px', overflow: 'hidden', ...up(0.2) }}>
                         {stats.map((s, i) => (
                             <Box key={s.label} sx={{ py: 2.25, px: 1, borderLeft: i ? `1px solid ${cv.border}` : 0 }}>
                                 <Box sx={{ color: s.color, '& svg': { fontSize: 20 } }}>{s.icon}</Box>
