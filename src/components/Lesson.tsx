@@ -15,7 +15,9 @@ import { cv } from '../theme'
 import QuestionVisual from './QuestionVisual'
 import { getCachedPlan } from '../services/lessonPlan'
 import { readLibrary, saveToLibrary } from '../services/library'
-import { subjectName } from '../data/ptCurriculum'
+import { subjectName, subjectColor } from '../data/ptCurriculum'
+import StepDots from './StepDots'
+import MivviLoader from './MivviLoader'
 import LessonAIPanel, { PANEL_WIDTH } from './LessonAIPanel'
 
 // A lesson is a class + exercises. First the "aula": Mivvi explains the topic
@@ -69,6 +71,14 @@ export default function Lesson({ lessonId, onComplete, onMistake, onBack, userPr
   const [exercises, setExercises] = useState<Exercise[]>([])
   const [exState, setExState] = useState<'idle' | 'loading' | 'ready' | 'failed'>('idle')
   const [loadStep, setLoadStep] = useState(0)
+  // Seconds on the loading screen: after a while, say why it's taking long.
+  const [waited, setWaited] = useState(0)
+  const loadingNow = phase === 'loading' || (phase === 'quiz' && exState === 'loading')
+  useEffect(() => {
+    if (!loadingNow) { setWaited(0); return }
+    const t = setInterval(() => setWaited((w) => w + 1), 1000)
+    return () => clearInterval(t)
+  }, [loadingNow])
 
   const [index, setIndex] = useState(0)
   const [userAnswer, setUserAnswer] = useState('')
@@ -280,8 +290,8 @@ export default function Lesson({ lessonId, onComplete, onMistake, onBack, userPr
     return (
       <Box sx={{ ...page, display: 'grid', placeItems: 'center', px: 3 }}>
         <Box sx={{ width: '100%', maxWidth: 440, display: 'grid', justifyItems: 'center', textAlign: 'center', ...fadeUp() }}>
-          <Mascot size={80} mood="thinking" outfit={currentOutfit} />
-          <Typography sx={{ fontSize: 13, color: cv.muted, mt: 2.5 }}>{subjectName(subject)}{lessonNumber ? ` · Lição ${lessonNumber}` : ''}</Typography>
+          <MivviLoader color={subjectColor(subject)} outfit={currentOutfit} />
+          <Typography sx={{ fontSize: 13, color: cv.muted, mt: 2 }}>{subjectName(subject)}{lessonNumber ? ` · Lição ${lessonNumber}` : ''}</Typography>
           <Typography sx={{ fontFamily: cv.display, fontSize: 21, fontWeight: 700, letterSpacing: '-0.02em', mt: 0.5 }}>{planTopic || (isPractice ? 'Treino de revisão' : 'A preparar a tua aula')}</Typography>
           <Box component="ol" sx={{ listStyle: 'none', p: 0, m: '16px 0 0', display: 'grid', gap: 0.75, justifyItems: 'center' }}>
             {steps.map((s, i) => (
@@ -290,7 +300,12 @@ export default function Lesson({ lessonId, onComplete, onMistake, onBack, userPr
               </Box>
             ))}
           </Box>
-          <Box component="button" onClick={() => onBack()} sx={{ ...pillGhost, mt: 4 }}>Cancelar</Box>
+          {waited >= 15 && (
+            <Typography sx={{ fontSize: 13, color: cv.muted, mt: 2.5, maxWidth: 340, lineHeight: 1.5, animation: 'lsUp .3s ease both' }}>
+              O Mivvi está com muita procura agora, por isso está a demorar mais. Continua a tentar{waited >= 45 ? '… quase lá' : ''}.
+            </Typography>
+          )}
+          <Box component="button" onClick={() => onBack()} sx={{ ...pillGhost, mt: waited >= 15 ? 2.5 : 4 }}>Cancelar</Box>
         </Box>
       </Box>
     )
@@ -357,13 +372,12 @@ export default function Lesson({ lessonId, onComplete, onMistake, onBack, userPr
       <Box sx={{ ...page, display: 'flex', flexDirection: 'column', pb: '200px', pr: `${inset}px`, transition: 'padding-right .3s cubic-bezier(.22,1,.36,1)' }}>
         {/* Top: close, segmented progress, back to the class */}
         <Box sx={{ position: 'sticky', top: 0, zIndex: 5, bgcolor: cv.bg, pt: 'env(safe-area-inset-top, 0px)' }}>
-          <Box sx={{ maxWidth: 640, mx: 'auto', display: 'flex', alignItems: 'center', gap: 1, px: 1.5, height: 52 }}>
+          <Box sx={{ maxWidth: 640, mx: 'auto', display: 'flex', alignItems: 'center', gap: { xs: 1, sm: 1.5 }, px: 1.5, height: 56 }}>
             <IconButton onClick={() => setShowExitDialog(true)} aria-label="Sair" sx={{ width: 34, height: 34 }}><Close sx={{ fontSize: 19 }} /></IconButton>
-            <Box sx={{ flex: 1, display: 'flex', gap: '3px' }} role="progressbar" aria-valuemin={0} aria-valuemax={exercises.length} aria-valuenow={index + 1}>
-              {exercises.map((_, i) => (
-                <Box key={i} sx={{ flex: 1, height: 4, borderRadius: 999, bgcolor: results[i] === 'right' ? cv.green : results[i] === 'wrong' ? cv.coral : i === index ? 'rgba(255,255,255,.85)' : 'rgba(255,255,255,.08)', transition: 'background-color .3s' }} />
-              ))}
-            </Box>
+            {/* Same steps as the class: green or red once answered */}
+            <StepDots color={subjectColor(subject)}
+              states={exercises.map((_, i) => (i === index ? 'now' : results[i] === 'right' ? 'right' : results[i] === 'wrong' ? 'wrong' : 'next'))} />
+            <Typography sx={{ fontSize: 12.5, fontWeight: 600, color: cv.muted, fontVariantNumeric: 'tabular-nums', minWidth: 34, textAlign: 'right' }}>{index + 1}/{exercises.length}</Typography>
             {theory && (
               <IconButton onClick={() => { soundManager.playPage(); setPhase('review') }} aria-label="Rever a aula" title="Rever a aula" sx={{ width: 34, height: 34 }}><AutoStoriesOutlined sx={{ fontSize: 18 }} /></IconButton>
             )}
@@ -376,7 +390,6 @@ export default function Lesson({ lessonId, onComplete, onMistake, onBack, userPr
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, fontSize: 12.5, fontWeight: 500, color: cv.muted, ...fadeUp() }}>
             <Box component="span" sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: KIND[kind].color }} />
             {inRetryPhase ? `Correção · ${KIND[kind].label}` : KIND[kind].label}
-            <Box component="span" sx={{ ml: 'auto', color: cv.faint, fontVariantNumeric: 'tabular-nums' }}>{index + 1}/{exercises.length}</Box>
           </Box>
 
           <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.25, mt: 1.5, ...fadeUp(0.04) }}>

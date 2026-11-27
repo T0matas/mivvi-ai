@@ -8,6 +8,7 @@ import { subjectName, subjectColor, yearLabel } from '../data/ptCurriculum'
 import { SubjectTile } from './SubjectDoodle'
 import QuestionVisual from './QuestionVisual'
 import { TopicImage } from './TheoryBlocks'
+import { useUniqueImages } from '../services/wikiImage'
 import ExitConfirmDialog from './ExitConfirmDialog'
 import Mascot from './Mascot'
 import { soundManager } from '../utils/soundEffects'
@@ -40,6 +41,8 @@ export default function Exam({ subject, userProfile, previous, onRecord, onExit 
   const [loadError, setLoadError] = useState(false)
   const [answers, setAnswers] = useState<string[]>([])
   const [index, setIndex] = useState(0)
+  // The questions' pictures, all different within the exam.
+  const examImages = useUniqueImages(`exam:${subject}`, (questions || []).map((q) => q.image), false)
   const [left, setLeft] = useState(COUNT * SECONDS_PER_QUESTION)
   const [results, setResults] = useState<boolean[]>([])
   const [reason, setReason] = useState('')
@@ -329,7 +332,7 @@ export default function Exam({ subject, userProfile, previous, onRecord, onExit 
       <Box key={index} sx={{ maxWidth: 640, mx: 'auto', px: 2.5, pt: 3, pb: 16, animation: 'exQ .25s ease both', '@keyframes exQ': { from: { opacity: 0, transform: 'translateY(6px)' } } }}>
         <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: cv.muted, textTransform: 'uppercase', letterSpacing: '.07em' }}>Pergunta {index + 1} de {questions.length}</Typography>
         <Typography sx={{ fontFamily: cv.display, fontSize: { xs: 19, sm: 22 }, fontWeight: 700, letterSpacing: '-0.015em', lineHeight: 1.35, mt: 1 }}>{q.question}</Typography>
-        {q.image && <TopicImage query={q.image} hideTitle />}
+        {q.image && <TopicImage image={examImages?.[index]} hideTitle />}
         {q.visual && <Box sx={{ mt: 2 }}><QuestionVisual visual={q.visual} subject={subject} /></Box>}
 
         {typing ? (

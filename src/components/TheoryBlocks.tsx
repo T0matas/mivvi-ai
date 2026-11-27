@@ -1,7 +1,7 @@
 import { Box, Typography, Skeleton } from '@mui/material'
-import { ArrowForward, ArrowDownward, LoopRounded, CheckRounded, OpenInNewRounded } from '@mui/icons-material'
+import { ArrowForward, ArrowDownward, LoopRounded, CheckRounded } from '@mui/icons-material'
 import { TheoryDiagram } from '../types'
-import { useWikiImage } from '../services/wikiImage'
+import { useWikiImage, useCutout, WikiImage } from '../services/wikiImage'
 import { cv } from '../theme'
 
 // The pieces of a lesson explanation, drawn in the app's style: a diagram
@@ -81,32 +81,25 @@ export function Diagram({ diagram, color }: { diagram: TheoryDiagram; color: str
   )
 }
 
-/** The main picture of a Wikipedia article about the section's idea. */
-/** `hideTitle`: in exams the article's name could give the answer away. */
-export function TopicImage({ query, hideTitle }: { query: string; hideTitle?: boolean }) {
-  const img = useWikiImage(query)
+/** The main picture of a Wikipedia article about the section's idea: no frame and no caption,
+ *  and without its background when it's a plain one (an object on white). */
+export function TopicImage(props: { query?: string; hideTitle?: boolean; /** Already chosen (see useUniqueImages): undefined = still looking, null = none. */ image?: WikiImage | null }) {
+  const chosen = 'image' in props
+  const looked = useWikiImage(chosen ? undefined : props.query)
+  const img = chosen ? props.image : looked
+  const cut = useCutout(img?.src || undefined)
   if (img === null) return null
+  const ready = img && cut !== undefined
   return (
-    <Box component="figure" sx={{ m: 0, mt: 2 }}>
-      <Box sx={{ position: 'relative', borderRadius: '18px', overflow: 'hidden', bgcolor: '#1b1b1b', boxShadow: `inset 0 0 0 1px ${cv.border}`, height: { xs: 170, sm: 210 }, display: 'grid', placeItems: 'center' }}>
-        {img === undefined ? (
-          <Skeleton variant="rectangular" animation="wave" sx={{ position: 'absolute', inset: 0, height: '100%', bgcolor: '#232323' }} />
-        ) : (
-          <>
-            {/* Blurred copy fills the frame; the full picture sits on top, never cropped. */}
-            <Box component="img" src={img.src} alt="" aria-hidden sx={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', filter: 'blur(22px) saturate(1.1)', transform: 'scale(1.2)', opacity: 0.3 }} />
-            <Box component="img" src={img.src} alt={img.title} loading="lazy" referrerPolicy="no-referrer" sx={{ position: 'absolute', inset: 12, width: 'calc(100% - 24px)', height: 'calc(100% - 24px)', objectFit: 'contain', borderRadius: '10px', filter: 'drop-shadow(0 8px 20px rgba(0,0,0,.45))', animation: 'thImg .5s ease both', '@keyframes thImg': { from: { opacity: 0 } } }} />
-          </>
-        )}
-      </Box>
-      {/* No caption in exams: just the picture. */}
-      {img && !hideTitle && (
-        <Box component="figcaption" sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mt: 0.75, fontSize: 12, color: cv.faint }}>
-          <span>{img.title}</span>
-          <Box component="a" href={img.page} target="_blank" rel="noopener noreferrer" sx={{ ml: 'auto', display: 'inline-flex', alignItems: 'center', gap: 0.25, color: cv.faint, textDecoration: 'none', '&:hover': { color: cv.muted } }}>
-            Wikipédia <OpenInNewRounded sx={{ fontSize: 12 }} />
-          </Box>
-        </Box>
+    <Box component="figure" sx={{ m: 0, mt: 2, display: 'grid', placeItems: 'center', minHeight: { xs: 150, sm: 190 } }}>
+      {!ready ? (
+        <Skeleton variant="rounded" animation="wave" sx={{ width: '100%', height: { xs: 150, sm: 190 }, borderRadius: '18px', bgcolor: '#1f1f1f' }} />
+      ) : (
+        <Box component="img" src={cut || img.src} alt={img.title} referrerPolicy="no-referrer"
+          sx={{ display: 'block', maxWidth: '100%', maxHeight: { xs: 190, sm: 240 }, objectFit: 'contain',
+            // A cut-out object floats with a soft shadow; a photo keeps rounded corners.
+            ...(cut ? { filter: 'drop-shadow(0 10px 22px rgba(0,0,0,.5))' } : { borderRadius: '16px' }),
+            animation: 'thImg .5s ease both', '@keyframes thImg': { from: { opacity: 0, transform: 'scale(.97)' } } }} />
       )}
     </Box>
   )

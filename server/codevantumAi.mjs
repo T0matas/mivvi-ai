@@ -15,6 +15,13 @@ export const CODEVANTUM_MODELS = {
   transcribe: 'whisper-large-v3-turbo', // the microphone in the chat
 };
 
+/** Tried in order when the chosen model is busy (each has its own rate limit). */
+const FALLBACK_MODELS = [CODEVANTUM_MODELS.smart, CODEVANTUM_MODELS.fast, CODEVANTUM_MODELS.vision];
+/** qwen only allows ~1000 output tokens a minute: only for short answers. */
+const SMALL_OUTPUT_ONLY = new Set([CODEVANTUM_MODELS.vision]);
+/** model → time it's usable again, when Groq asked for a long wait (e.g. the daily token limit). */
+const coolingDown = new Map();
+
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const MAX_MESSAGES = 20;
 const MAX_MESSAGE_CHARS = 4000;
@@ -249,7 +256,7 @@ Return:
         {"kind": "compare", "title": "...", "items": [{"label": "option name", "text": "its features, max 80 chars"}]}   (2-3 things side by side)
         {"kind": "layers", "title": "...", "items": [{"label": "top layer", "text": "..."}]}   (a structure from top to bottom, 3-5 items)
         {"kind": "cycle", "title": "...", "items": [{"label": "...", "text": "..."}]}   (a cycle that repeats, 3-5 items)
-      "image": "optional: the exact title of a Wikipedia article (in the student's language when possible) whose main picture shows this idea, e.g. \"Núcleo (sistema operativo)\", \"Fotossíntese\", \"Basquetebol\"",
+      "image": "2 or 3 exact titles of existing Wikipedia articles, separated by \" | \", most specific first and a well-known general one last, whose main picture shows this idea, e.g. \"Disco rígido | Armazenamento de dados | Computador\", \"Fotossíntese | Folha | Planta\", \"Basquetebol | Bola\"",
       "example": "one concrete worked example",
       "minutes": 2
     }
@@ -257,7 +264,7 @@ Return:
   "keyPoints": ["4 to 6 short sentences to remember (max 90 characters each)"],
   "think": "one short question that makes the student reflect (no answer)"
 }
-Use 3 or 4 sections that build on each other. Give a "diagram" to at least two sections and an "image" to the sections where a real photo or figure helps. Keep sentences short: the student reads on a phone. No HTML. You may use **bold** for a key word.`,
+Use 3 or 4 sections that build on each other. Give a "diagram" to at least two sections and an "image" to EVERY section (real, common article titles that surely have a picture: objects, places, people, devices, living things — not abstract phrases). Keep sentences short: the student reads on a phone. No HTML. You may use **bold** for a key word.`,
     };
   },
 
@@ -468,11 +475,35 @@ export function createCodevantumAiHandler({ getKey = () => process.env.GROQ_API_
     };
 
     try {
-      let upstream = await call(model);
-      // The big model hits Groq's rate limits first: fall back to the fast one.
-      if (!upstream.ok && model === CODEVANTUM_MODELS.smart && !stream) {
-        console.warn('[codevantum-ai] smart model failed with', upstream.status, '- retrying with the fast model');
-        upstream = await call(CODEVANTUM_MODELS.fast);
+      // Each Groq model has its own per-minute token limit, and a lesson
+      // (plan + class + exercises at once) goes over one model's quickly. So on
+      // a busy (429) or failed answer, try the other models; if all of them are
+      // busy, wait as long as Groq asks (Retry-After, at most 12 s, ~30 s in all) and go again.
+      const usable = (m) => (coolingDown.get(m) || 0) < Date.now() && (!SMALL_OUTPUT_ONLY.has(m) || (prompt.maxTokens || 0) <= 1000)
+      let chain = hasImages ? [model] : [...new Set([model, ...FALLBACK_MODELS])].filter(usable)
+      if (!chain.length) chain = [CODEVANTUM_MODELS.fast]
+      const deadline = Date.now() + (mode === 'plan' ? 25000 : 30000)
+      let upstream
+      let wait = 0
+      for (let round = 0; round < 3; round++) {
+        const now = chain.filter(usable)
+        for (const m of now.length ? now : [CODEVANTUM_MODELS.fast]) {
+          upstream = await call(m)
+          if (upstream.ok) break
+          if (upstream.status === 429) {
+            const after = Number(upstream.headers.get('retry-after')) || 4
+            // A long wait means a daily limit: skip this model until then instead of asking again every time.
+            if (after > 20) coolingDown.set(m, Date.now() + after * 1000)
+            else wait = Math.max(wait, after)
+          }
+          console.warn('[codevantum-ai]', m, 'failed with', upstream.status, '- trying the next model')
+          if (upstream.status !== 429 && upstream.status < 500 && upstream.status !== 400) break
+        }
+        if (upstream.ok || upstream.status !== 429 || stream) break
+        const ms = Math.min(wait, 12) * 1000 + 300
+        if (Date.now() + ms > deadline) break
+        await new Promise((r) => setTimeout(r, ms))
+        wait = 0
       }
       if (upstream.status === 429) return sendJson(res, 429, { error: 'O Mivvi está muito ocupado agora. Tenta daqui a pouco.' });
       if (!upstream.ok) {

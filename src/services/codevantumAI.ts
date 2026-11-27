@@ -47,9 +47,20 @@ async function post(body: object, signal?: AbortSignal) {
 
 /** One full answer: { reply } (a JSON string for the feedback and exercises modes). */
 export async function askKodu({ mode, messages, context, signal }: KoduRequest): Promise<string> {
-  const response = await post({ mode, messages, context }, signal)
-  const data = await response.json()
-  return data.reply as string
+  // Never wait forever: after 70 s the request gives up (counted as "busy", so callers can try again).
+  const timeout = new AbortController()
+  const timer = setTimeout(() => timeout.abort(), 70000)
+  signal?.addEventListener('abort', () => timeout.abort())
+  try {
+    const response = await post({ mode, messages, context }, timeout.signal)
+    const data = await response.json()
+    return data.reply as string
+  } catch (e) {
+    if (timeout.signal.aborted && !signal?.aborted) throw new KoduError('O Mivvi demorou demasiado a responder.', 429)
+    throw e
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 /** Streams Kodu's answer token by token; resolves with the whole text. */

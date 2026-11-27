@@ -6,6 +6,7 @@ import { chatWithKodu, TutorContext } from '../services/aiService'
 import { KoduMessage } from '../services/codevantumAI'
 import { soundManager } from '../utils/soundEffects'
 import { cv } from '../theme'
+import { MivviAlive } from './MivviLoader'
 
 // "Pergunta ao Mivvi": the AI beside the lesson, like an assistant panel.
 // It knows the lesson's topic and the question on screen (shown as a context
@@ -97,8 +98,7 @@ export default function LessonAIPanel({ open, onClose, mobile, context, contextL
         }}>
         {/* Header */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.75, height: 54, flexShrink: 0, borderBottom: `1px solid ${cv.border}` }}>
-          <Box component="img" src="/mivvi-logo.svg" alt="" sx={{ width: 24, height: 24, borderRadius: '8px', flexShrink: 0 }} />
-          <Typography sx={{ flex: 1, fontSize: 15, fontWeight: 650 }}>Pergunta ao Mivvi</Typography>
+          <Typography sx={{ flex: 1, fontSize: 15, fontWeight: 650, pl: 0.25 }}>Pergunta ao Mivvi</Typography>
           <IconButton onClick={() => { abort.current?.abort(); setMessages([]); soundManager.playClick() }} aria-label="Nova conversa" title="Nova conversa" sx={{ width: 32, height: 32 }}><EditNoteRounded sx={{ fontSize: 19 }} /></IconButton>
           <IconButton onClick={() => { soundManager.playBack(); onClose() }} aria-label="Fechar" sx={{ width: 32, height: 32 }}><Close sx={{ fontSize: 18 }} /></IconButton>
         </Box>
@@ -107,7 +107,7 @@ export default function LessonAIPanel({ open, onClose, mobile, context, contextL
         <Box ref={scroller} sx={{ flex: 1, minHeight: 0, overflowY: 'auto', px: 2, py: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
           {messages.length === 0 && (
             <Box sx={{ my: 'auto', display: 'grid', justifyItems: 'center', textAlign: 'center', gap: 1, py: 2 }}>
-              <Box component="img" src="/mivvi-logo.svg" alt="Mivvi" sx={{ width: 58, height: 58, borderRadius: '17px' }} />
+              <Box sx={{ pb: 1 }}><MivviAlive size={56} /></Box>
               <Typography sx={{ fontFamily: cv.display, fontSize: 17, fontWeight: 700, mt: 1 }}>Tens alguma dúvida?</Typography>
               <Typography sx={{ fontSize: 13.5, color: cv.muted, maxWidth: 260, lineHeight: 1.5 }}>
                 {answered === false && contextText ? 'Ajudo-te a pensar, mas a resposta tens de ser tu a descobrir 😉' : 'Pergunta-me o que quiseres sobre esta aula.'}

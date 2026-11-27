@@ -152,9 +152,14 @@ const isUsable = (ex: any) => ex && typeof ex.question === 'string' && ex.questi
 
 // ── Lesson parts ────────────────────────────────────────────────────────────
 
+/** Before trying again: when the AI was busy (429), give its per-minute limit time to recover. */
+const BUSY_WAITS = [6000, 15000]
+const isBusy = (e: unknown) => (e as any)?.status === 429
+const pauseIfBusy = (e: unknown, attempt: number) => (isBusy(e) ? new Promise((r) => setTimeout(r, BUSY_WAITS[attempt] ?? 15000)) : Promise.resolve())
+
 /** The explanation part ("aula") of a lesson. Returns null when the AI can't write it. */
 export async function generateTheory(req: LessonRequest): Promise<LessonTheory | null> {
-  for (let attempt = 0; attempt < 2; attempt++) {
+  for (let attempt = 0; attempt < 3; attempt++) {
     try {
       const data = parseJson(await askKodu({ mode: 'lesson', context: lessonContext(req) }));
       const str = (s: any, n: number) => (typeof s === 'string' ? s.trim().slice(0, n) : '');
@@ -167,7 +172,8 @@ export async function generateTheory(req: LessonRequest): Promise<LessonTheory |
             points: (Array.isArray(s?.points) ? s.points : []).map((p: any) => str(p, 140)).filter(Boolean).slice(0, 5),
             terms: (Array.isArray(s?.terms) ? s.terms : []).map((t: any) => ({ term: str(t?.term, 40), meaning: str(t?.meaning, 140) })).filter((t: any) => t.term && t.meaning).slice(0, 4),
             diagram: ['steps', 'compare', 'layers', 'cycle'].includes(s?.diagram?.kind) && items.length >= 2 ? { kind: s.diagram.kind, title: str(s.diagram.title, 60) || undefined, items } : undefined,
-            image: str(s?.image, 100) || undefined,
+            // The titles the AI suggested, then the part's key words as a last try.
+            image: [str(s?.image, 200), ...(Array.isArray(s?.terms) ? s.terms.map((t: any) => str(t?.term, 40)) : [])].filter(Boolean).join(' | ') || undefined,
             example: str(s?.example, 400) || undefined,
             minutes: Math.min(9, Math.max(1, Number(s?.minutes) || 2)),
           }
@@ -185,6 +191,8 @@ export async function generateTheory(req: LessonRequest): Promise<LessonTheory |
       };
     } catch (error) {
       console.warn('Kodu could not write the explanation', error);
+      if (attempt === 1 && !isBusy(error)) break;
+      if (attempt < 2) await pauseIfBusy(error, attempt);
     }
   }
   return null;
@@ -198,7 +206,7 @@ export async function generateLessonExercises(req: LessonRequest, theory?: Lesso
   };
   const STORAGE_KEY = `seen_questions_${req.subject}_${req.schoolYear}`;
   let lastError: unknown = null;
-  for (let attempt = 0; attempt < 2; attempt++) {
+  for (let attempt = 0; attempt < 3; attempt++) {
     try {
       let parsed: any = parseJson(await askKodu({ mode: 'exercises', context }));
       if (!Array.isArray(parsed)) parsed = parsed.exercises || Object.values(parsed).find(Array.isArray) || [];
@@ -217,6 +225,8 @@ export async function generateLessonExercises(req: LessonRequest, theory?: Lesso
     } catch (error) {
       lastError = error;
       console.warn('Kodu could not write the exercises (attempt ' + (attempt + 1) + ')', error);
+      if (attempt === 1 && !isBusy(error)) break;
+      if (attempt < 2) await pauseIfBusy(error, attempt);
     }
   }
   throw lastError || new Error('no exercises');
