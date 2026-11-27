@@ -165,7 +165,7 @@ export default function LessonAIPanel({ open, onClose, mobile, context, contextL
               )}
             </Box>
           </Box>
-          <Typography sx={{ fontSize: 11, color: cv.faint, textAlign: 'center', mt: 0.75 }}>Codevantum AI · o Mivvi pode enganar-se</Typography>
+          <Typography sx={{ fontSize: 11, color: cv.faint, textAlign: 'center', mt: 0.75 }}>O Mivvi pode enganar-se</Typography>
         </Box>
       </Box>
     </>
