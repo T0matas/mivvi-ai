@@ -23,6 +23,8 @@ function codevantumAi(apiKey: string | undefined): Plugin {
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
+  // Backup AI when Groq's free quota runs out (server-side only).
+  for (const k of ['GEMINI_API_KEY', 'GEMINI_MODEL', 'CEREBRAS_API_KEY']) if (env[k]) process.env[k] = env[k]
   return {
     plugins: [react(), codevantumAi(env.GROQ_API_KEY || process.env.GROQ_API_KEY)],
     server: {

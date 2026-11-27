@@ -13,20 +13,26 @@ export interface WikiImage {
   page: string
 }
 
-const CACHE = 'mivvi_wikiimg_v2'
+const CACHE = 'mivvi_wikiimg_v3'
 const memory = new Map<string, Promise<WikiImage | null>>()
 
 function readCache(): Record<string, WikiImage | null> {
   try { return JSON.parse(localStorage.getItem(CACHE) || '{}') } catch { return {} }
 }
 
+// Words in a file name that mean it isn't a photo of the thing (whole words only, so "photograph" is fine).
+const NOT_PHOTO_WORDS = new Set(['map', 'maps', 'mapa', 'mapas', 'carte', 'karte', 'locator', 'location', 'localizacao', 'localização', 'flag', 'bandeira', 'bandera', 'drapeau', 'logo', 'logotipo', 'emblem', 'emblema', 'coat', 'arms', 'brasao', 'brasão', 'escudo', 'chart', 'graph', 'grafico', 'gráfico', 'diagram', 'diagrama', 'esquema', 'icon', 'symbol', 'simbolo', 'símbolo', 'signature', 'assinatura', 'owid'])
+const NOT_A_PHOTO = { test: (name: string) => /\.svg/i.test(name) || name.toLowerCase().split(/[^a-zà-ÿ]+/).some((w) => NOT_PHOTO_WORDS.has(w)) }
+
 /** The main picture of the article with exactly this title (redirects followed). No free-text search: it found unrelated pictures. */
 async function byTitle(lang: string, title: string): Promise<WikiImage | null> {
-  const url = `https://${lang}.wikipedia.org/w/api.php?action=query&format=json&origin=*&redirects=1&titles=${encodeURIComponent(title)}&prop=pageimages|info&inprop=url&piprop=thumbnail&pithumbsize=900&pilicense=free`
+  const url = `https://${lang}.wikipedia.org/w/api.php?action=query&format=json&origin=*&redirects=1&titles=${encodeURIComponent(title)}&prop=pageimages|info|pageprops&ppprop=disambiguation&inprop=url&piprop=thumbnail|name&pithumbsize=900&pilicense=free`
   const res = await fetch(url)
   if (!res.ok) return null
   const data = await res.json()
-  const page = (Object.values(data?.query?.pages || {}) as any[]).find((p) => !('missing' in p) && p.thumbnail?.source && p.thumbnail.width >= 200)
+  // Only real photos of the thing: no list-of-meanings pages, no maps, flags, logos, charts or drawn diagrams.
+  const page = (Object.values(data?.query?.pages || {}) as any[]).find((p) => !('missing' in p) && !p.pageprops?.disambiguation
+    && p.thumbnail?.source && p.thumbnail.width >= 200 && !NOT_A_PHOTO.test(`${p.pageimage || ''} ${p.thumbnail.source}`))
   if (!page) return null
   return { src: page.thumbnail.source, width: page.thumbnail.width, height: page.thumbnail.height, title: page.title, page: page.fullurl || `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(page.title)}` }
 }
@@ -201,6 +207,15 @@ export function cutOutBackground(src: string): Promise<string | null> {
         }
         // Nothing left (or almost nothing removed): keep the original.
         if (cleared > w * h * 0.97 || cleared < w * h * 0.05) return resolve(null)
+        // What's left must stand out on the dark page: dark drawings (ink on paper,
+        // black objects) keep their original background instead.
+        let lum = 0, kept = 0
+        for (let p = 0; p < w * h; p += 3) {
+          if (px[p * 4 + 3] < 128) continue
+          lum += 0.2126 * px[p * 4] + 0.7152 * px[p * 4 + 1] + 0.0722 * px[p * 4 + 2]
+          kept++
+        }
+        if (!kept || lum / kept < 95) return resolve(null)
         ctx.putImageData(data, 0, 0)
         resolve(canvas.toDataURL('image/png'))
       } catch {

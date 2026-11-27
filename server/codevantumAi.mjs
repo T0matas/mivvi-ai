@@ -15,6 +15,25 @@ export const CODEVANTUM_MODELS = {
   transcribe: 'whisper-large-v3-turbo', // the microphone in the chat
 };
 
+/**
+ * When Groq has no quota left:
+ * - Google Gemini (GEMINI_API_KEY): free key from Google AI Studio with just a
+ *   Google account, no credit card. Its OpenAI-compatible endpoint.
+ * - Cerebras (CEREBRAS_API_KEY), if set.
+ * - Pollinations' free text AI (no key, but only 1 reply every 45 s per server;
+ *   not used for the tutor chat, so students' own messages never go there).
+ */
+const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
+function backupProviders({ gemini, cerebras }, { stream, mode }) {
+  return [
+    // Flash-Lite first: a whole lesson in ~3 s; Flash is often overloaded at Google.
+    gemini && { name: 'gemini-lite', url: GEMINI_URL, key: gemini, model: 'gemini-flash-lite-latest' },
+    gemini && { name: 'gemini', url: GEMINI_URL, key: gemini, model: process.env.GEMINI_MODEL || 'gemini-flash-latest', reasoning: true },
+    cerebras && { name: 'cerebras', url: 'https://api.cerebras.ai/v1/chat/completions', key: cerebras, model: 'gpt-oss-120b', reasoning: true },
+    !stream && mode !== 'tutor' && { name: 'pollinations', url: 'https://text.pollinations.ai/openai', model: 'openai' },
+  ].filter(Boolean);
+}
+
 /** Tried in order when the chosen model is busy (each has its own rate limit). */
 const FALLBACK_MODELS = [CODEVANTUM_MODELS.smart, CODEVANTUM_MODELS.fast, CODEVANTUM_MODELS.vision];
 /** qwen only allows ~1000 output tokens a minute: only for short answers. */
@@ -256,7 +275,7 @@ Return:
         {"kind": "compare", "title": "...", "items": [{"label": "option name", "text": "its features, max 80 chars"}]}   (2-3 things side by side)
         {"kind": "layers", "title": "...", "items": [{"label": "top layer", "text": "..."}]}   (a structure from top to bottom, 3-5 items)
         {"kind": "cycle", "title": "...", "items": [{"label": "...", "text": "..."}]}   (a cycle that repeats, 3-5 items)
-      "image": "2 or 3 exact titles of existing Wikipedia articles, separated by \" | \", most specific first and a well-known general one last, whose main picture shows this idea, e.g. \"Disco rígido | Armazenamento de dados | Computador\", \"Fotossíntese | Folha | Planta\", \"Basquetebol | Bola\"",
+      "image": "2 or 3 exact titles of existing Wikipedia articles, separated by \" | \", whose main PHOTO shows something this section actually talks about: a named person, place, building, event, artwork, object, device, animal or plant from the text, most specific first. E.g. for a section on the Descobrimentos: \"Torre de Belém | Caravela | Padrão dos Descobrimentos\"; for saving files: \"Disco rígido | Pen drive\". Use the exact title of the article with the RIGHT meaning (\"Caravela\" is the ship; \"Caravela-portuguesa\" is a jellyfish). Never generic or abstract words (Jornal, Internet, Pergunta, Reflexão, Pensamento, Conceito) and never maps, flags, logos or charts",
       "example": "one concrete worked example",
       "minutes": 2
     }
@@ -264,7 +283,7 @@ Return:
   "keyPoints": ["4 to 6 short sentences to remember (max 90 characters each)"],
   "think": "one short question that makes the student reflect (no answer)"
 }
-Use 3 or 4 sections that build on each other. Give a "diagram" to at least two sections and an "image" to EVERY section (real, common article titles that surely have a picture: objects, places, people, devices, living things — not abstract phrases). Keep sentences short: the student reads on a phone. No HTML. You may use **bold** for a key word.`,
+Use 3 or 4 sections that build on each other. Give a "diagram" to at least two sections and an "image" to EVERY section (real article titles with a photo of something named in that section — the picture must clearly match what the section explains). Keep sentences short: the student reads on a phone. No HTML. You may use **bold** for a key word.`,
     };
   },
 
@@ -414,7 +433,7 @@ async function* groqTokens(body) {
  * Body: { mode: 'tutor' | 'feedback' | 'exercises', messages?, context?, stream? }
  * Replies { reply, model } or, with stream: true, SSE frames {token} … {done}.
  */
-export function createCodevantumAiHandler({ getKey = () => process.env.GROQ_API_KEY, fetchImpl = globalThis.fetch, limits } = {}) {
+export function createCodevantumAiHandler({ getKey = () => process.env.GROQ_API_KEY, getBackupKey = () => ({ gemini: process.env.GEMINI_API_KEY, cerebras: process.env.CEREBRAS_API_KEY }), fetchImpl = globalThis.fetch, limits } = {}) {
   const allow = createRateLimiter(limits);
 
   return async function codevantumAi(req, res, next) {
@@ -443,7 +462,7 @@ export function createCodevantumAiHandler({ getKey = () => process.env.GROQ_API_
     if (!messages.length) return sendJson(res, 400, { error: 'A conversa está vazia.' });
 
     const key = getKey();
-    if (!key) return sendJson(res, 503, { error: 'A IA não está configurada: falta GROQ_API_KEY no ficheiro .env.' });
+    if (!key && !Object.values(getBackupKey()).some(Boolean)) return sendJson(res, 503, { error: 'A IA não está configurada: falta GROQ_API_KEY no ficheiro .env.' });
 
     const ip = req.socket?.remoteAddress || 'unknown';
     if (!allow(ip)) return sendJson(res, 429, { error: 'Muitos pedidos seguidos. Espera um pouco e tenta outra vez.' });
@@ -474,38 +493,80 @@ export function createCodevantumAiHandler({ getKey = () => process.env.GROQ_API_
       });
     };
 
+    /** Any OpenAI-compatible provider (the backups below). */
+    // Each backup gets 20 s at most, so one stuck provider doesn't block the next.
+    const callProvider = (p) => {
+      const own = new AbortController()
+      const stop = () => own.abort()
+      controller.signal.addEventListener('abort', stop)
+      const t = setTimeout(stop, 20000)
+      return fetchImpl(p.url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(p.key && { Authorization: `Bearer ${p.key}` }) },
+      body: JSON.stringify({
+        model: p.model,
+        messages: [{ role: 'system', content: prompt.system }, ...messages.map(toProvider)],
+        temperature: prompt.temperature,
+        max_tokens: prompt.maxTokens,
+        ...(p.reasoning && { reasoning_effort: 'low' }),
+        ...(prompt.json && { response_format: { type: 'json_object' } }),
+        ...(stream && { stream: true }),
+      }),
+      signal: own.signal,
+    }).catch(() => new Response('{}', { status: 503 })).finally(() => { clearTimeout(t); controller.signal.removeEventListener('abort', stop) })
+    }
+
     try {
       // Each Groq model has its own per-minute token limit, and a lesson
       // (plan + class + exercises at once) goes over one model's quickly. So on
       // a busy (429) or failed answer, try the other models; if all of them are
       // busy, wait as long as Groq asks (Retry-After, at most 12 s, ~30 s in all) and go again.
       const usable = (m) => (coolingDown.get(m) || 0) < Date.now() && (!SMALL_OUTPUT_ONLY.has(m) || (prompt.maxTokens || 0) <= 1000)
-      let chain = hasImages ? [model] : [...new Set([model, ...FALLBACK_MODELS])].filter(usable)
-      if (!chain.length) chain = [CODEVANTUM_MODELS.fast]
+      const all = hasImages ? [model] : [...new Set([model, ...FALLBACK_MODELS])].filter((m) => !SMALL_OUTPUT_ONLY.has(m) || (prompt.maxTokens || 0) <= 1000)
+      const chain = all
       const deadline = Date.now() + (mode === 'plan' ? 25000 : 30000)
+      const backups = backupProviders(getBackupKey(), { stream, mode })
+      const tryBackups = async () => {
+        for (const p of backups) {
+          const next = await callProvider(p)
+          console.warn('[codevantum-ai] backup', p.name, '->', next.status)
+          if (next.ok) return next
+        }
+        return null
+      }
       let upstream
       let wait = 0
       for (let round = 0; round < 3; round++) {
+        // Models on a long pause are skipped, unless every model is paused (then try them anyway).
         const now = chain.filter(usable)
-        for (const m of now.length ? now : [CODEVANTUM_MODELS.fast]) {
+        for (const m of now.length ? now : chain) {
           upstream = await call(m)
           if (upstream.ok) break
           if (upstream.status === 429) {
             const after = Number(upstream.headers.get('retry-after')) || 4
-            // A long wait means a daily limit: skip this model until then instead of asking again every time.
-            if (after > 20) coolingDown.set(m, Date.now() + after * 1000)
+            const body = await upstream.clone().text().catch(() => '')
+            // The daily limit (or a long wait): skip this model for a while instead of asking again every time.
+            if (/per day|TPD|RPD/i.test(body) || after > 90) coolingDown.set(m, Date.now() + Math.max(after, 300) * 1000)
             else wait = Math.max(wait, after)
           }
           console.warn('[codevantum-ai]', m, 'failed with', upstream.status, '- trying the next model')
           if (upstream.status !== 429 && upstream.status < 500 && upstream.status !== 400) break
         }
-        if (upstream.ok || upstream.status !== 429 || stream) break
+        if (upstream.ok) break
+        // Groq is out of quota (or down): straight to the other providers, before any waiting.
+        if (round === 0 && (upstream.status === 429 || upstream.status >= 500) && backups.length) {
+          const other = await tryBackups()
+          if (other) { upstream = other; break }
+        }
+        if (upstream.status !== 429 || stream) break
+        // Every Groq model on its daily pause: waiting won't help.
+        if (!chain.some(usable)) break
         const ms = Math.min(wait, 12) * 1000 + 300
         if (Date.now() + ms > deadline) break
         await new Promise((r) => setTimeout(r, ms))
         wait = 0
       }
-      if (upstream.status === 429) return sendJson(res, 429, { error: 'O Mivvi está muito ocupado agora. Tenta daqui a pouco.' });
+      if (upstream.status === 429 || upstream.status === 402) return sendJson(res, 429, { error: 'O Mivvi está muito ocupado agora. Tenta daqui a pouco.' });
       if (!upstream.ok) {
         console.error('[codevantum-ai] Groq error', upstream.status, (await upstream.text()).slice(0, 300));
         return sendJson(res, 502, { error: 'A IA não respondeu. Tenta novamente.' });

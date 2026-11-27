@@ -1,3 +1,4 @@
+import { speakPiper } from './piperVoice';
 // Audio Service for TTS and sound playback
 let speechSynthesis: SpeechSynthesis | null = null;
 
@@ -79,20 +80,27 @@ export const getVoicesForLanguage = (language: string): SpeechSynthesisVoice[] =
 };
 
 /**
- * Play audio for listening exercise
+ * Play audio for listening exercise: Mivvi's open-source voice (Piper), or the
+ * browser's voice when Piper can't run. `onProgress` reports the first-time
+ * voice download (0–1).
  */
 export const playListeningAudio = async (
     text: string,
-    language: string = 'pt-BR',
+    language: string = 'pt-PT',
     onStart?: () => void,
-    onEnd?: () => void
+    onEnd?: () => void,
+    onProgress?: (fraction: number) => void
 ): Promise<void> => {
     try {
-        if (onStart) onStart();
-        await speak(text, language, 0.9); // Slightly slower for listening exercises
-        if (onEnd) onEnd();
+        await speakPiper(text, language, { rate: 0.95, onProgress, onStart });
     } catch (error) {
-        console.error('Error playing listening audio:', error);
-        if (onEnd) onEnd();
+        console.warn('Piper voice unavailable, using the browser voice:', error);
+        try {
+            if (onStart) onStart();
+            await speak(text, language, 0.9); // Slightly slower for listening exercises
+        } catch (e) {
+            console.error('Error playing listening audio:', e);
+        }
     }
+    if (onEnd) onEnd();
 };

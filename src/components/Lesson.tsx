@@ -11,6 +11,7 @@ import ExitConfirmDialog from './ExitConfirmDialog'
 import LessonRewards from './LessonRewards'
 import LessonTheoryView, { rich } from './LessonTheoryView'
 import { playListeningAudio } from '../services/audioService'
+import { preloadVoice, voiceLanguage, stopPiper } from '../services/piperVoice'
 import { cv } from '../theme'
 import QuestionVisual from './QuestionVisual'
 import { getCachedPlan } from '../services/lessonPlan'
@@ -94,6 +95,8 @@ export default function Lesson({ lessonId, onComplete, onMistake, onBack, userPr
   const [inRetryPhase, setInRetryPhase] = useState(false)
   const [showRetryInterstitial, setShowRetryInterstitial] = useState(false)
   const [isPlayingAudio, setIsPlayingAudio] = useState(false)
+  // First time only: Mivvi's voice for this language is downloading (0–1), or null.
+  const [voiceLoad, setVoiceLoad] = useState<number | null>(null)
   const [showExitDialog, setShowExitDialog] = useState(false)
   const [showRewards, setShowRewards] = useState(false)
   const [rewardsData, setRewardsData] = useState({ xp: 0, correct: 0, total: 0, gems: 0 })
@@ -132,7 +135,7 @@ export default function Lesson({ lessonId, onComplete, onMistake, onBack, userPr
 
   useEffect(() => {
     alive.current = true
-    const timer = setInterval(() => setLoadStep((s) => Math.min(s + 1, 2)), 1600)
+    const timer = setInterval(() => setLoadStep((s) => Math.min(s + 1, 3)), 1600)
     ;(async () => {
       // A lesson done before already has its class in the Library.
       const saved = readLibrary().find((i) => i.lessonId === lessonId && i.subject === subject)?.theory
@@ -231,10 +234,28 @@ export default function Lesson({ lessonId, onComplete, onMistake, onBack, userPr
     onComplete(rewardsData.xp, rewardsData.correct, rewardsData.total, rewardsData.gems, subject)
   }
 
+  const audioLang = voiceLanguage(subject, lang)
   const handlePlayAudio = async () => {
-    if (!exercise || isPlayingAudio) return
-    await playListeningAudio(exercise.audioText || exercise.question, lang, () => setIsPlayingAudio(true), () => setIsPlayingAudio(false))
+    if (!exercise || isPlayingAudio || voiceLoad !== null) return
+    setVoiceLoad(0)
+    await playListeningAudio(exercise.audioText || exercise.question, audioLang,
+      () => { setVoiceLoad(null); setIsPlayingAudio(true) },
+      () => { setVoiceLoad(null); setIsPlayingAudio(false) },
+      (f) => setVoiceLoad(f))
   }
+
+  // A new question (or leaving) stops the voice.
+  useEffect(() => () => stopPiper(), [index, inRetryPhase])
+
+  // Mivvi's voice loads on the loading screen, with the class, so listening
+  // exercises play straight away. (Already stored → done at once.)
+  const [voicePct, setVoicePct] = useState<number | 'done' | 'failed'>(0)
+  useEffect(() => {
+    let alive = true
+    preloadVoice(audioLang, (f) => { if (alive) setVoicePct(Math.min(0.99, f)) })
+      .then(() => { if (alive) setVoicePct('done') }, () => { if (alive) setVoicePct('failed') })
+    return () => { alive = false }
+  }, [audioLang])
 
   // Keyboard: 1–4 pick an option, Enter checks or continues.
   useEffect(() => {
@@ -294,11 +315,20 @@ export default function Lesson({ lessonId, onComplete, onMistake, onBack, userPr
           <Typography sx={{ fontSize: 13, color: cv.muted, mt: 2 }}>{subjectName(subject)}{lessonNumber ? ` · Lição ${lessonNumber}` : ''}</Typography>
           <Typography sx={{ fontFamily: cv.display, fontSize: 21, fontWeight: 700, letterSpacing: '-0.02em', mt: 0.5 }}>{planTopic || (isPractice ? 'Treino de revisão' : 'A preparar a tua aula')}</Typography>
           <Box component="ol" sx={{ listStyle: 'none', p: 0, m: '16px 0 0', display: 'grid', gap: 0.75, justifyItems: 'center' }}>
-            {steps.map((s, i) => (
-              <Box component="li" key={s} sx={{ display: 'inline-flex', alignItems: 'center', gap: 1, fontSize: 13.5, color: i < loadStep ? cv.muted : cv.faint, ...(i === loadStep && shimmer) }}>
-                {i < loadStep && <Check sx={{ fontSize: 15, color: cv.green }} />}{s}
-              </Box>
-            ))}
+            {/* The class's steps, then (last) Mivvi's voice for the listening exercises — ticked in order */}
+            {[...steps, voicePct === 'failed' ? null : 'A preparar a voz do Mivvi'].filter(Boolean).map((s, i) => {
+              const voiceRow = i === steps.length
+              const voiceDone = voicePct === 'done'
+              // The voice only ticks after the three steps before it.
+              const at = Math.min(loadStep, steps.length) + (loadStep >= steps.length && voiceDone ? 1 : 0)
+              const done = i < at
+              const pct = voiceRow && typeof voicePct === 'number' && voicePct > 0 ? ` · ${Math.round(voicePct * 100)}%` : ''
+              return (
+                <Box component="li" key={s} sx={{ display: 'inline-flex', alignItems: 'center', gap: 1, fontSize: 13.5, color: done ? cv.muted : cv.faint, ...(i === at && shimmer) }}>
+                  {done && <Check sx={{ fontSize: 15, color: cv.green }} />}{s}{pct}
+                </Box>
+              )
+            })}
           </Box>
           {waited >= 15 && (
             <Typography sx={{ fontSize: 13, color: cv.muted, mt: 2.5, maxWidth: 340, lineHeight: 1.5, animation: 'lsUp .3s ease both' }}>
@@ -441,7 +471,9 @@ export default function Lesson({ lessonId, onComplete, onMistake, onBack, userPr
                     '@keyframes lsWave': { '0%, 100%': { transform: 'scaleY(.45)' }, '50%': { transform: 'scaleY(1)' } } }} />
                 ))}
               </Box>
-              <Typography sx={{ fontSize: 12.5, color: cv.muted, minWidth: 56, textAlign: 'right' }}>{isPlayingAudio ? 'A tocar…' : 'Ouvir'}</Typography>
+              <Typography sx={{ fontSize: 12.5, color: cv.muted, minWidth: 56, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                {isPlayingAudio ? 'A tocar…' : voiceLoad !== null ? (voiceLoad > 0 && voiceLoad < 1 ? `A preparar a voz… ${Math.round(voiceLoad * 100)}%` : 'A preparar…') : 'Ouvir'}
+              </Typography>
             </Box>
           )}
 

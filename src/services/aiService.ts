@@ -172,8 +172,8 @@ export async function generateTheory(req: LessonRequest): Promise<LessonTheory |
             points: (Array.isArray(s?.points) ? s.points : []).map((p: any) => str(p, 140)).filter(Boolean).slice(0, 5),
             terms: (Array.isArray(s?.terms) ? s.terms : []).map((t: any) => ({ term: str(t?.term, 40), meaning: str(t?.meaning, 140) })).filter((t: any) => t.term && t.meaning).slice(0, 4),
             diagram: ['steps', 'compare', 'layers', 'cycle'].includes(s?.diagram?.kind) && items.length >= 2 ? { kind: s.diagram.kind, title: str(s.diagram.title, 60) || undefined, items } : undefined,
-            // The titles the AI suggested, then the part's key words as a last try.
-            image: [str(s?.image, 200), ...(Array.isArray(s?.terms) ? s.terms.map((t: any) => str(t?.term, 40)) : [])].filter(Boolean).join(' | ') || undefined,
+            // The Wikipedia titles the AI suggested (tried in order).
+            image: str(s?.image, 200) || undefined,
             example: str(s?.example, 400) || undefined,
             minutes: Math.min(9, Math.max(1, Number(s?.minutes) || 2)),
           }
